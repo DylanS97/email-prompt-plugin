@@ -1,0 +1,182 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Jellyfin.Plugin.JellyseerrIntegration</name>
+    </assembly>
+    <members>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Api.JellyseerrIntegrationController">
+            <summary>
+            API endpoints for the JellySeerr Integration plugin.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Api.JellyseerrIntegrationController.#ctor(MediaBrowser.Controller.Net.IAuthorizationContext,Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.JellyseerrIntegration.Api.JellyseerrIntegrationController"/> class.
+            </summary>
+            <param name="authContext">Instance of the <see cref="T:MediaBrowser.Controller.Net.IAuthorizationContext"/> interface.</param>
+            <param name="jellyseerrService">Instance of the <see cref="T:Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService"/>.</param>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Api.JellyseerrIntegrationController.GetEmailPromptStatus">
+            <summary>
+            Returns whether the currently authenticated Jellyfin user should be prompted to add their
+            email to their JellySeerr account.
+            </summary>
+            <returns>Email prompt status for the current user.</returns>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Api.JellyseerrIntegrationController.GetScript">
+            <summary>
+            Serves the plugin client-side JavaScript file.
+            </summary>
+            <returns>The plugin JavaScript.</returns>
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Models.EmailPromptStatusDto">
+            <summary>
+            Response returned to the Jellyfin web client for the email prompt status check.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Models.EmailPromptStatusDto.NeedsEmail">
+            <summary>
+            Gets or sets a value indicating whether the user should be prompted to add their email.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Models.EmailPromptStatusDto.SettingsUrl">
+            <summary>
+            Gets or sets the URL to link to in the prompt banner.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Models.JellyseerrUser">
+            <summary>
+            JellySeerr user object returned by the /api/v1/users endpoint.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Models.JellyseerrUser.Id">
+            <summary>
+            Gets or sets the JellySeerr internal user ID.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Models.JellyseerrUser.Email">
+            <summary>
+            Gets or sets the account email. Empty string when not set.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Models.JellyseerrUser.JellyfinUsername">
+            <summary>
+            Gets or sets the linked Jellyfin username.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Models.JellyseerrUsersResponse">
+            <summary>
+            Paginated response from GET /api/v1/users.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Models.JellyseerrUsersResponse.Results">
+            <summary>
+            Gets or sets the list of users on this page.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Plugin">
+            <summary>
+            The JellySeerr Integration plugin.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Plugin.#ctor(MediaBrowser.Common.Configuration.IApplicationPaths,MediaBrowser.Model.Serialization.IXmlSerializer)">
+            <summary>
+            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.JellyseerrIntegration.Plugin"/> class.
+            </summary>
+            <param name="applicationPaths">Instance of the <see cref="T:MediaBrowser.Common.Configuration.IApplicationPaths"/> interface.</param>
+            <param name="xmlSerializer">Instance of the <see cref="T:MediaBrowser.Model.Serialization.IXmlSerializer"/> interface.</param>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Plugin.Instance">
+            <summary>
+            Gets the current plugin instance.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Plugin.Name">
+            <inheritdoc />
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Plugin.Id">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Plugin.GetPages">
+            <inheritdoc />
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Configuration.PluginConfiguration">
+            <summary>
+            Plugin configuration.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Configuration.PluginConfiguration.EnableEmailPrompt">
+            <summary>
+            Gets or sets a value indicating whether the email prompt feature is enabled.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Configuration.PluginConfiguration.JellyseerrUrl">
+            <summary>
+            Gets or sets the JellySeerr base URL (no trailing slash), e.g. http://jellyseerr:5055.
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Configuration.PluginConfiguration.JellyseerrApiKey">
+            <summary>
+            Gets or sets the JellySeerr admin API key (from JellySeerr Settings → General).
+            </summary>
+        </member>
+        <member name="P:Jellyfin.Plugin.JellyseerrIntegration.Configuration.PluginConfiguration.CustomFormUrl">
+            <summary>
+            Gets or sets an optional override URL shown in the banner instead of the direct JellySeerr link.
+            Supports the {username} placeholder to include the user's Jellyfin username.
+            </summary>
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.PluginServiceRegistrator">
+            <summary>
+            Registers plugin services with the dependency injection container.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.PluginServiceRegistrator.RegisterServices(Microsoft.Extensions.DependencyInjection.IServiceCollection,MediaBrowser.Controller.IServerApplicationHost)">
+            <inheritdoc />
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService">
+            <summary>
+            Handles communication with the JellySeerr API.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService.#ctor(System.Net.Http.IHttpClientFactory,Microsoft.Extensions.Logging.ILogger{Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService})">
+            <summary>
+            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService"/> class.
+            </summary>
+            <param name="httpClientFactory">Instance of the <see cref="T:System.Net.Http.IHttpClientFactory"/> interface.</param>
+            <param name="logger">Instance of the <see cref="T:Microsoft.Extensions.Logging.ILogger`1"/> interface.</param>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService.GetUserEmailStatusAsync(System.String)">
+            <summary>
+            Checks whether the given Jellyfin user has set their email in JellySeerr.
+            Returns NeedsEmail=false (no banner) if the user cannot be found in JellySeerr or on any error.
+            </summary>
+            <param name="jellyfinUsername">The Jellyfin username to look up.</param>
+            <returns>Email prompt status for this user.</returns>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Services.JellyseerrService.InvalidateCache(System.String)">
+            <summary>
+            Removes the cached status for a user, forcing a fresh lookup on the next request.
+            </summary>
+            <param name="jellyfinUsername">The Jellyfin username whose cache entry to remove.</param>
+        </member>
+        <member name="T:Jellyfin.Plugin.JellyseerrIntegration.Services.ScriptInjectorService">
+            <summary>
+            Injects the plugin client script into Jellyfin's index.html at server startup.
+            </summary>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Services.ScriptInjectorService.#ctor(MediaBrowser.Common.Configuration.IApplicationPaths,Microsoft.Extensions.Logging.ILogger{Jellyfin.Plugin.JellyseerrIntegration.Services.ScriptInjectorService})">
+            <summary>
+            Initializes a new instance of the <see cref="T:Jellyfin.Plugin.JellyseerrIntegration.Services.ScriptInjectorService"/> class.
+            </summary>
+            <param name="applicationPaths">Instance of the <see cref="T:MediaBrowser.Common.Configuration.IApplicationPaths"/> interface.</param>
+            <param name="logger">Instance of the <see cref="T:Microsoft.Extensions.Logging.ILogger`1"/> interface.</param>
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Services.ScriptInjectorService.StartAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:Jellyfin.Plugin.JellyseerrIntegration.Services.ScriptInjectorService.StopAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+    </members>
+</doc>

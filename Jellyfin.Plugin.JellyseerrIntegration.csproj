@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>Jellyfin.Plugin.JellyseerrIntegration</AssemblyName>
+    <RootNamespace>Jellyfin.Plugin.JellyseerrIntegration</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Nullable>enable</Nullable>
+    <!-- SA1633: no file headers; SA1309: allow _camelCase fields; SA1101: no this. prefix required -->
+    <NoWarn>SA1633;SA1309;SA1101</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jellyfin.Controller" Version="10.11.8">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Jellyfin.Model" Version="10.11.8">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SerilogAnalyzer" Version="0.15.0" PrivateAssets="All" />
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="stylecop.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Configuration\configPage.html" />
+    <EmbeddedResource Include="Configuration\configPage.html" />
+    <None Remove="Web\jellyseerr.js" />
+    <EmbeddedResource Include="Web\jellyseerr.js" />
+  </ItemGroup>
+
+</Project>

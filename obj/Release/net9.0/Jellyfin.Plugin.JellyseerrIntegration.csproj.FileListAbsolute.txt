@@ -1,0 +1,14 @@
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.csproj.AssemblyReference.cache
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.GeneratedMSBuildEditorConfig.editorconfig
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.AssemblyInfoInputs.cache
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.AssemblyInfo.cs
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.csproj.CoreCompileInputs.cache
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.xml
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/bin/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.deps.json
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/bin/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.dll
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/bin/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.pdb
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/bin/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.xml
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.dll
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/refint/Jellyfin.Plugin.JellyseerrIntegration.dll
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.pdb
+/home/dylans/code/jellyfin-integrations/email-prompt-plugin/obj/Release/net9.0/ref/Jellyfin.Plugin.JellyseerrIntegration.dll
