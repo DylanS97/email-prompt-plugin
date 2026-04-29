@@ -1,0 +1,20 @@
+[
+    {
+        "guid": "4b5d0e3a-7c8f-4d2e-9a1b-6f3c8e0d4b5a",
+        "name": "JellySeerr Integration",
+        "description": "Prompts Jellyfin users to add their email address to their JellySeerr account so they receive media request notifications.",
+        "overview": "Link your Jellyfin users to JellySeerr",
+        "owner": "DylanS97",
+        "category": "Notifications",
+        "versions": [
+            {
+                "version": "10.0.0.0",
+                "changelog": "- Initial release: email prompt banner for users who have not set an email in JellySeerr",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://github.com/DylanS97/jellyfin-jellyseerr-integration/releases/download/v10.0.0.0/jellyseerr-integration_10.0.0.0.zip",
+                "checksum": "REPLACE_WITH_MD5_OF_ZIP",
+                "timestamp": "2026-04-29T00:00:00Z"
+            }
+        ]
+    }
+]
