@@ -165,7 +165,7 @@ public class JellyseerrService
             using var client = _httpClientFactory.CreateClient("JellySeerr");
             client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
 
-            var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/users?take=100";
+            var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/user?take=100";
             _logger.LogDebug("JellySeerr Integration: fetching users from {Url}", url);
 
             var response = await client.GetFromJsonAsync<JellyseerrUsersResponse>(url).ConfigureAwait(false);
