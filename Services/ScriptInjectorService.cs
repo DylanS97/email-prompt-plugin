@@ -61,5 +61,31 @@ public class ScriptInjectorService : IHostedService
     }
 
     /// <inheritdoc />
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        var indexPath = Path.Combine(_applicationPaths.WebPath, "index.html");
+        if (!File.Exists(indexPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var content = await File.ReadAllTextAsync(indexPath, cancellationToken).ConfigureAwait(false);
+
+            if (!content.Contains(ScriptTag, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var modified = content.Replace(ScriptTag + "\n", string.Empty, StringComparison.Ordinal);
+            await File.WriteAllTextAsync(indexPath, modified, cancellationToken).ConfigureAwait(false);
+
+            _logger.LogInformation("JellySeerr Integration: removed script from index.html");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "JellySeerr Integration: failed to remove script from index.html");
+        }
+    }
 }
