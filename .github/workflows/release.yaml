@@ -1,0 +1,105 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**/*.md'
+      - 'manifest.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read version from build.yaml
+        id: meta
+        run: |
+          VERSION=$(grep '^version:' build.yaml | sed 's/version:[[:space:]]*//' | tr -d '"')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build
+        run: dotnet build -c Release
+
+      - name: Package and checksum
+        id: package
+        run: |
+          mkdir -p artifacts
+          cp bin/Release/net9.0/Jellyfin.Plugin.JellyseerrIntegration.dll artifacts/
+          cd artifacts
+          zip jellyseerr-integration_${{ steps.meta.outputs.version }}.zip Jellyfin.Plugin.JellyseerrIntegration.dll
+          CHECKSUM=$(md5sum jellyseerr-integration_${{ steps.meta.outputs.version }}.zip | cut -d' ' -f1)
+          echo "checksum=$CHECKSUM" >> $GITHUB_OUTPUT
+
+      - name: Update manifest.json
+        run: |
+          python3 << 'EOF'
+          import json
+          from datetime import datetime, timezone
+
+          with open('manifest.json') as f:
+              manifest = json.load(f)
+
+          version = '${{ steps.meta.outputs.version }}'
+          tag = '${{ steps.meta.outputs.tag }}'
+          checksum = '${{ steps.package.outputs.checksum }}'
+          repo = '${{ github.repository }}'
+          zip_name = f'jellyseerr-integration_{version}.zip'
+          source_url = f'https://github.com/{repo}/releases/download/{tag}/{zip_name}'
+          timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+          versions = manifest[0]['versions']
+          for v in versions:
+              if v['version'] == version:
+                  v['sourceUrl'] = source_url
+                  v['checksum'] = checksum
+                  v['timestamp'] = timestamp
+                  break
+          else:
+              versions.insert(0, {
+                  'version': version,
+                  'changelog': '',
+                  'targetAbi': '10.11.0.0',
+                  'sourceUrl': source_url,
+                  'checksum': checksum,
+                  'timestamp': timestamp,
+              })
+
+          with open('manifest.json', 'w') as f:
+              json.dump(manifest, f, indent=4)
+              f.write('\n')
+          EOF
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          files: artifacts/jellyseerr-integration_${{ steps.meta.outputs.version }}.zip
+          make_latest: true
+
+      - name: Commit updated manifest.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update manifest for ${{ steps.meta.outputs.tag }} [skip ci]"
+            git push
+          fi
