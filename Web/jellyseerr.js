@@ -25,8 +25,8 @@
             }
 
             var data = await response.json();
-            if (data.needsEmail && data.settingsUrl) {
-                showBanner(data.settingsUrl);
+            if (data.needsEmail) {
+                showBanner();
             }
         } catch (e) {
             // Fail silently — never interrupt normal Jellyfin usage
@@ -35,7 +35,7 @@
         checked = true;
     }
 
-    function showBanner(url) {
+    function showBanner() {
         if (document.getElementById('jellyseerr-email-banner')) {
             return;
         }
@@ -53,22 +53,49 @@
             'padding:10px 16px',
             'display:flex',
             'align-items:center',
-            'justify-content:space-between',
+            'gap:12px',
             'font-size:13px',
             'box-shadow:0 2px 6px rgba(0,0,0,.5)'
         ].join(';'));
 
-        var message = document.createElement('span');
-        var link = document.createElement('a');
-        link.href = url;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = 'request server account';
-        link.setAttribute('style', 'color:#fff;text-decoration:underline;font-weight:bold');
+        var left = document.createElement('div');
+        left.setAttribute('style', 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap');
 
-        message.appendChild(document.createTextNode('Add your email to your '));
-        message.appendChild(link);
-        message.appendChild(document.createTextNode(' to receive media notifications.'));
+        var label = document.createElement('span');
+        label.textContent = 'Add your email to receive media request notifications:';
+
+        var input = document.createElement('input');
+        input.type = 'email';
+        input.placeholder = 'your@email.com';
+        input.setAttribute('style', [
+            'padding:4px 8px',
+            'border-radius:4px',
+            'border:none',
+            'font-size:13px',
+            'color:#111',
+            'min-width:200px'
+        ].join(';'));
+
+        var saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        saveBtn.setAttribute('style', [
+            'padding:4px 12px',
+            'border-radius:4px',
+            'border:none',
+            'background:#fff',
+            'color:#b87800',
+            'font-size:13px',
+            'font-weight:bold',
+            'cursor:pointer'
+        ].join(';'));
+
+        var errorMsg = document.createElement('span');
+        errorMsg.setAttribute('style', 'color:#ffd0d0;font-size:12px');
+
+        left.appendChild(label);
+        left.appendChild(input);
+        left.appendChild(saveBtn);
+        left.appendChild(errorMsg);
 
         var dismissBtn = document.createElement('button');
         dismissBtn.setAttribute('aria-label', 'Dismiss notification');
@@ -79,7 +106,7 @@
             'cursor:pointer',
             'font-size:20px',
             'line-height:1',
-            'padding:0 0 0 16px',
+            'padding:0',
             'flex-shrink:0'
         ].join(';'));
         dismissBtn.textContent = '\xd7';
@@ -88,14 +115,61 @@
             sessionStorage.setItem(DISMISSED_KEY, '1');
         });
 
-        banner.appendChild(message);
+        saveBtn.addEventListener('click', async function () {
+            var email = input.value.trim();
+            if (!email || !email.includes('@')) {
+                errorMsg.textContent = 'Please enter a valid email address.';
+                return;
+            }
+
+            input.disabled = true;
+            saveBtn.disabled = true;
+            errorMsg.textContent = '';
+
+            try {
+                var response = await fetch('/JellyseerrIntegration/EmailPrompt/Email', {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': 'MediaBrowser Token="' + ApiClient.accessToken() + '"',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: email })
+                });
+
+                if (response.ok || response.status === 204) {
+                    showSuccess(banner, dismissBtn);
+                } else {
+                    errorMsg.textContent = 'Failed to save — please try again.';
+                    input.disabled = false;
+                    saveBtn.disabled = false;
+                }
+            } catch (e) {
+                errorMsg.textContent = 'Failed to save — please try again.';
+                input.disabled = false;
+                saveBtn.disabled = false;
+            }
+        });
+
+        banner.appendChild(left);
         banner.appendChild(dismissBtn);
         document.body.insertBefore(banner, document.body.firstChild);
     }
 
-    // Check on SPA navigation
-    document.addEventListener('viewshow', check);
+    function showSuccess(banner, dismissBtn) {
+        while (banner.firstChild) {
+            banner.removeChild(banner.firstChild);
+        }
 
-    // Initial check after a short delay to allow ApiClient to initialize
+        banner.style.background = '#1a7a1a';
+
+        var msg = document.createElement('span');
+        msg.setAttribute('style', 'flex:1');
+        msg.textContent = 'Email saved. You can update it anytime in your request server account settings.';
+
+        banner.appendChild(msg);
+        banner.appendChild(dismissBtn);
+    }
+
+    document.addEventListener('viewshow', check);
     setTimeout(check, 2000);
 }());

@@ -12,10 +12,4 @@ public sealed class EmailPromptStatusDto
     /// </summary>
     [JsonPropertyName("needsEmail")]
     public bool NeedsEmail { get; set; }
-
-    /// <summary>
-    /// Gets or sets the URL to link to in the prompt banner.
-    /// </summary>
-    [JsonPropertyName("settingsUrl")]
-    public string? SettingsUrl { get; set; }
 }

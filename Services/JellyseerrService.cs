@@ -18,7 +18,7 @@ public class JellyseerrService
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<JellyseerrService> _logger;
-    private readonly Dictionary<string, (DateTimeOffset Expires, EmailPromptStatusDto Result)> _cache
+    private readonly Dictionary<string, (DateTimeOffset Expires, JellyseerrUser? User)> _cache
         = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -34,38 +34,130 @@ public class JellyseerrService
 
     /// <summary>
     /// Checks whether the given Jellyfin user has set their email in JellySeerr.
-    /// Returns NeedsEmail=false (no banner) if the user cannot be found in JellySeerr or on any error.
+    /// Returns NeedsEmail=false if the user cannot be found or on any error.
     /// </summary>
     /// <param name="jellyfinUsername">The Jellyfin username to look up.</param>
     /// <returns>Email prompt status for this user.</returns>
     public async Task<EmailPromptStatusDto> GetUserEmailStatusAsync(string jellyfinUsername)
     {
-        if (_cache.TryGetValue(jellyfinUsername, out var cached) && cached.Expires > DateTimeOffset.UtcNow)
+        var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
+        if (user is null)
         {
-            return cached.Result;
+            return new EmailPromptStatusDto { NeedsEmail = false };
         }
 
-        var result = await FetchStatusAsync(jellyfinUsername).ConfigureAwait(false);
-        _cache[jellyfinUsername] = (DateTimeOffset.UtcNow.Add(CacheTtl), result);
-        return result;
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            _logger.LogDebug(
+                "JellySeerr Integration: user '{Username}' already has an email set, suppressing prompt",
+                jellyfinUsername);
+            return new EmailPromptStatusDto { NeedsEmail = false };
+        }
+
+        _logger.LogDebug(
+            "JellySeerr Integration: user '{Username}' has no email in JellySeerr, showing prompt",
+            jellyfinUsername);
+        return new EmailPromptStatusDto { NeedsEmail = true };
     }
 
     /// <summary>
-    /// Removes the cached status for a user, forcing a fresh lookup on the next request.
+    /// Updates the JellySeerr email for the given Jellyfin user via PUT /api/v1/user/{userId}.
+    /// Invalidates the cache on success.
     /// </summary>
-    /// <param name="jellyfinUsername">The Jellyfin username whose cache entry to remove.</param>
-    public void InvalidateCache(string jellyfinUsername) => _cache.Remove(jellyfinUsername);
-
-    private async Task<EmailPromptStatusDto> FetchStatusAsync(string jellyfinUsername)
+    /// <param name="jellyfinUsername">The Jellyfin username whose JellySeerr email to update.</param>
+    /// <param name="email">The email address to set.</param>
+    /// <returns>True if the update succeeded, false otherwise.</returns>
+    public async Task<bool> UpdateUserEmailAsync(string jellyfinUsername, string email)
     {
-        var noPrompt = new EmailPromptStatusDto { NeedsEmail = false };
-
         var config = Plugin.Instance?.Configuration;
         if (config is null
             || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
             || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
         {
-            return noPrompt;
+            _logger.LogWarning("JellySeerr Integration: cannot update email — plugin is not configured");
+            return false;
+        }
+
+        var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
+        if (user is null)
+        {
+            _logger.LogWarning(
+                "JellySeerr Integration: cannot update email for '{Username}' — user not found in JellySeerr",
+                jellyfinUsername);
+            return false;
+        }
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient("JellySeerr");
+            client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
+
+            var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/user/{user.Id}";
+            _logger.LogDebug(
+                "JellySeerr Integration: sending PUT {Url} for Jellyfin user '{Username}' (JellySeerr ID {UserId})",
+                url,
+                jellyfinUsername,
+                user.Id);
+
+            var body = new JellyseerrUpdateUserRequest { Email = email };
+            var response = await client.PutAsJsonAsync(url, body).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                _logger.LogWarning(
+                    "JellySeerr Integration: PUT /api/v1/user/{UserId} returned {StatusCode} for '{Username}': {Body}",
+                    user.Id,
+                    (int)response.StatusCode,
+                    jellyfinUsername,
+                    content);
+                return false;
+            }
+
+            _logger.LogInformation(
+                "JellySeerr Integration: successfully set email for JellySeerr user {UserId} (Jellyfin: '{Username}')",
+                user.Id,
+                jellyfinUsername);
+
+            InvalidateCache(jellyfinUsername);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "JellySeerr Integration: exception while updating email for '{Username}'",
+                jellyfinUsername);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Removes the cached user record for the given Jellyfin username, forcing a fresh lookup.
+    /// </summary>
+    /// <param name="jellyfinUsername">The Jellyfin username whose cache entry to remove.</param>
+    public void InvalidateCache(string jellyfinUsername) => _cache.Remove(jellyfinUsername);
+
+    private async Task<JellyseerrUser?> FindUserAsync(string jellyfinUsername)
+    {
+        if (_cache.TryGetValue(jellyfinUsername, out var cached) && cached.Expires > DateTimeOffset.UtcNow)
+        {
+            return cached.User;
+        }
+
+        var user = await FetchUserAsync(jellyfinUsername).ConfigureAwait(false);
+        _cache[jellyfinUsername] = (DateTimeOffset.UtcNow.Add(CacheTtl), user);
+        return user;
+    }
+
+    private async Task<JellyseerrUser?> FetchUserAsync(string jellyfinUsername)
+    {
+        var config = Plugin.Instance?.Configuration;
+        if (config is null
+            || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
+            || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
+        {
+            return null;
         }
 
         try
@@ -74,11 +166,14 @@ public class JellyseerrService
             client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
 
             var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/users?take=100";
+            _logger.LogDebug("JellySeerr Integration: fetching users from {Url}", url);
+
             var response = await client.GetFromJsonAsync<JellyseerrUsersResponse>(url).ConfigureAwait(false);
 
             if (response?.Results is null)
             {
-                return noPrompt;
+                _logger.LogWarning("JellySeerr Integration: received null or empty user list from {Url}", url);
+                return null;
             }
 
             var match = response.Results.Find(u =>
@@ -87,35 +182,20 @@ public class JellyseerrService
             if (match is null)
             {
                 _logger.LogDebug(
-                    "JellySeerr Integration: no JellySeerr user found for Jellyfin username '{Username}'",
-                    jellyfinUsername);
-                return noPrompt;
-            }
-
-            if (!string.IsNullOrWhiteSpace(match.Email))
-            {
-                return noPrompt;
-            }
-
-            string settingsUrl;
-            if (!string.IsNullOrWhiteSpace(config.CustomFormUrl))
-            {
-                settingsUrl = config.CustomFormUrl.Replace(
-                    "{username}",
+                    "JellySeerr Integration: no JellySeerr user matched Jellyfin username '{Username}' in {Count} results",
                     jellyfinUsername,
-                    StringComparison.OrdinalIgnoreCase);
-            }
-            else
-            {
-                settingsUrl = $"{config.JellyseerrUrl.TrimEnd('/')}/users/{match.Id}/settings/notifications";
+                    response.Results.Count);
             }
 
-            return new EmailPromptStatusDto { NeedsEmail = true, SettingsUrl = settingsUrl };
+            return match;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "JellySeerr Integration: failed to fetch user status from JellySeerr");
-            return noPrompt;
+            _logger.LogWarning(
+                ex,
+                "JellySeerr Integration: failed to fetch user list from JellySeerr for '{Username}'",
+                jellyfinUsername);
+            return null;
         }
     }
 }

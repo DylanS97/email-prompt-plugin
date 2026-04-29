@@ -7,6 +7,7 @@ using MediaBrowser.Controller.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.JellyseerrIntegration.Api;
 
@@ -19,18 +20,22 @@ public class JellyseerrIntegrationController : ControllerBase
 {
     private readonly IAuthorizationContext _authContext;
     private readonly JellyseerrService _jellyseerrService;
+    private readonly ILogger<JellyseerrIntegrationController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="JellyseerrIntegrationController"/> class.
     /// </summary>
     /// <param name="authContext">Instance of the <see cref="IAuthorizationContext"/> interface.</param>
     /// <param name="jellyseerrService">Instance of the <see cref="JellyseerrService"/>.</param>
+    /// <param name="logger">Instance of the <see cref="ILogger{JellyseerrIntegrationController}"/> interface.</param>
     public JellyseerrIntegrationController(
         IAuthorizationContext authContext,
-        JellyseerrService jellyseerrService)
+        JellyseerrService jellyseerrService,
+        ILogger<JellyseerrIntegrationController> logger)
     {
         _authContext = authContext;
         _jellyseerrService = jellyseerrService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -49,6 +54,7 @@ public class JellyseerrIntegrationController : ControllerBase
 
         if (user is null)
         {
+            _logger.LogWarning("JellySeerr Integration: GetEmailPromptStatus called with no authenticated user");
             return Unauthorized();
         }
 
@@ -58,11 +64,57 @@ public class JellyseerrIntegrationController : ControllerBase
             || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
             || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
         {
+            _logger.LogDebug("JellySeerr Integration: email prompt is disabled or plugin is not configured");
             return Ok(new EmailPromptStatusDto { NeedsEmail = false });
         }
 
         var status = await _jellyseerrService.GetUserEmailStatusAsync(user.Username).ConfigureAwait(false);
         return Ok(status);
+    }
+
+    /// <summary>
+    /// Updates the email on the current user's JellySeerr account.
+    /// </summary>
+    /// <param name="request">The email update request.</param>
+    /// <returns>204 No Content on success.</returns>
+    [HttpPut("EmailPrompt/Email")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> UpdateEmail([FromBody] UpdateEmailRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Email) || !request.Email.Contains('@'))
+        {
+            _logger.LogWarning("JellySeerr Integration: UpdateEmail called with invalid email '{Email}'", request?.Email);
+            return BadRequest("A valid email address is required.");
+        }
+
+        var authInfo = await _authContext.GetAuthorizationInfo(Request).ConfigureAwait(false);
+        var user = authInfo.User;
+
+        if (user is null)
+        {
+            _logger.LogWarning("JellySeerr Integration: UpdateEmail called with no authenticated user");
+            return Unauthorized();
+        }
+
+        _logger.LogInformation(
+            "JellySeerr Integration: '{Username}' is requesting email update",
+            user.Username);
+
+        var success = await _jellyseerrService.UpdateUserEmailAsync(user.Username, request.Email).ConfigureAwait(false);
+
+        if (!success)
+        {
+            _logger.LogWarning(
+                "JellySeerr Integration: email update failed for Jellyfin user '{Username}'",
+                user.Username);
+            return StatusCode(StatusCodes.Status502BadGateway);
+        }
+
+        return NoContent();
     }
 
     /// <summary>
@@ -80,6 +132,7 @@ public class JellyseerrIntegrationController : ControllerBase
         var stream = typeof(Plugin).Assembly.GetManifestResourceStream(ResourceName);
         if (stream is null)
         {
+            _logger.LogError("JellySeerr Integration: embedded resource '{Resource}' not found", ResourceName);
             return NotFound();
         }
 
