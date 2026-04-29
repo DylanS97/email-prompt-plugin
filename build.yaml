@@ -1,7 +1,7 @@
 ---
 name: "JellySeerr Integration"
 guid: "4b5d0e3a-7c8f-4d2e-9a1b-6f3c8e0d4b5a"
-version: "10.0.0.1"
+version: "10.0.0.2"
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 overview: "Link your Jellyfin users to JellySeerr"
