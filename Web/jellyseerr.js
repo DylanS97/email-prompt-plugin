@@ -9,20 +9,30 @@
             return;
         }
 
-        if (typeof ApiClient === 'undefined' || !ApiClient.isLoggedIn()) {
+        var token;
+        try {
+            token = typeof ApiClient !== 'undefined' ? ApiClient.accessToken() : null;
+        } catch (e) {
+            return;
+        }
+
+        if (!token) {
             return;
         }
 
         try {
             var response = await fetch('/JellyseerrIntegration/EmailPrompt/Status', {
                 headers: {
-                    'Authorization': 'MediaBrowser Token="' + ApiClient.accessToken() + '"'
+                    'Authorization': 'MediaBrowser Token="' + token + '"'
                 }
             });
 
             if (!response.ok) {
                 return;
             }
+
+            // Mark checked as soon as we get a valid server response so we don't re-poll
+            checked = true;
 
             var data = await response.json();
             if (data.needsEmail) {
@@ -31,8 +41,6 @@
         } catch (e) {
             // Fail silently — never interrupt normal Jellyfin usage
         }
-
-        checked = true;
     }
 
     function showBanner() {
@@ -170,6 +178,21 @@
         banner.appendChild(dismissBtn);
     }
 
+    // Poll every 500ms until ApiClient has an access token, then run the initial check.
+    // Falls back to viewshow for SPA navigation after that.
+    var initPoll = setInterval(function () {
+        try {
+            if (typeof ApiClient !== 'undefined' && ApiClient.accessToken()) {
+                clearInterval(initPoll);
+                check();
+            }
+        } catch (e) {
+            clearInterval(initPoll);
+        }
+    }, 500);
+
+    // Give up if the client never becomes ready (e.g. user is on login page)
+    setTimeout(function () { clearInterval(initPoll); }, 30000);
+
     document.addEventListener('viewshow', check);
-    setTimeout(check, 2000);
 }());
