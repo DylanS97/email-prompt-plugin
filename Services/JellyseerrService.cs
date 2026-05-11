@@ -50,13 +50,12 @@ public class JellyseerrService
             return new EmailPromptStatusDto { NeedsEmail = false };
         }
 
-        if (!string.IsNullOrWhiteSpace(user.Email))
+        if (!string.IsNullOrWhiteSpace(user.Email) && user.Email.Contains('@', StringComparison.Ordinal))
         {
             _logger.LogInformation(
-                "JellySeerr Integration: user '{Username}' has email set in JellySeerr (length {Len}) (email {email}) — suppressing prompt",
+                "JellySeerr Integration: user '{Username}' has email set in JellySeerr (length {Len}) — suppressing prompt",
                 jellyfinUsername,
-                user.Email.Length,
-                user.Email);
+                user.Email.Length);
             return new EmailPromptStatusDto { NeedsEmail = false };
         }
 
