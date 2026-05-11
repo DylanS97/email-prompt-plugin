@@ -15,7 +15,7 @@ namespace Jellyfin.Plugin.JellyseerrIntegration.Services;
 public class JellyseerrService
 {
     private const string ApiKeyHeader = "X-Api-Key";
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<JellyseerrService> _logger;
@@ -151,7 +151,11 @@ public class JellyseerrService
         }
 
         var user = await FetchUserAsync(jellyfinUsername).ConfigureAwait(false);
-        _cache[jellyfinUsername] = (DateTimeOffset.UtcNow.Add(CacheTtl), user);
+        if (user is not null)
+        {
+            _cache[jellyfinUsername] = (DateTimeOffset.UtcNow.Add(CacheTtl), user);
+        }
+
         return user;
     }
 
