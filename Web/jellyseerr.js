@@ -70,7 +70,7 @@
         left.setAttribute('style', 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap');
 
         var label = document.createElement('span');
-        label.textContent = 'Add your email to receive media request notifications:';
+        label.textContent = 'Add your email to receive notifications:';
 
         var input = document.createElement('input');
         input.type = 'email';
