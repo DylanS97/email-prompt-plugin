@@ -55,7 +55,8 @@ public class JellyseerrService
             _logger.LogInformation(
                 "JellySeerr Integration: user '{Username}' has email set in JellySeerr (length {Len}) (email {email}) — suppressing prompt",
                 jellyfinUsername,
-                user.Email.Length, user.Email);
+                user.Email.Length,
+                user.Email);
             return new EmailPromptStatusDto { NeedsEmail = false };
         }
 
