@@ -161,6 +161,24 @@
         banner.appendChild(left);
         banner.appendChild(dismissBtn);
         document.body.appendChild(banner);
+        watchForMedia(banner);
+    }
+
+    function watchForMedia(banner) {
+        function anyPlaying() {
+            return Array.prototype.some.call(
+                document.querySelectorAll('video, audio'),
+                function (m) { return !m.paused && !m.ended && m.readyState > 0; }
+            );
+        }
+
+        var interval = setInterval(function () {
+            if (!document.body.contains(banner)) {
+                clearInterval(interval);
+                return;
+            }
+            banner.style.display = anyPlaying() ? 'none' : 'flex';
+        }, 1000);
     }
 
     function showSuccess(banner, dismissBtn) {
