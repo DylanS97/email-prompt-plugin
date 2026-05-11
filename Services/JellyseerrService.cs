@@ -53,9 +53,9 @@ public class JellyseerrService
         if (!string.IsNullOrWhiteSpace(user.Email))
         {
             _logger.LogInformation(
-                "JellySeerr Integration: user '{Username}' has email set in JellySeerr (length {Len}) — suppressing prompt",
+                "JellySeerr Integration: user '{Username}' has email set in JellySeerr (length {Len}) (email {email}) — suppressing prompt",
                 jellyfinUsername,
-                user.Email.Length);
+                user.Email.Length, user.Email);
             return new EmailPromptStatusDto { NeedsEmail = false };
         }
 
