@@ -52,7 +52,7 @@
         banner.id = 'jellyseerr-email-banner';
         banner.setAttribute('style', [
             'position:fixed',
-            'top:0',
+            'bottom:0',
             'left:0',
             'right:0',
             'z-index:99999',
@@ -63,7 +63,7 @@
             'align-items:center',
             'gap:12px',
             'font-size:13px',
-            'box-shadow:0 2px 6px rgba(0,0,0,.5)'
+            'box-shadow:0 -2px 6px rgba(0,0,0,.5)'
         ].join(';'));
 
         var left = document.createElement('div');
@@ -160,7 +160,7 @@
 
         banner.appendChild(left);
         banner.appendChild(dismissBtn);
-        document.body.insertBefore(banner, document.body.firstChild);
+        document.body.appendChild(banner);
     }
 
     function showSuccess(banner, dismissBtn) {

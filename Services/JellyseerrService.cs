@@ -97,15 +97,15 @@ public class JellyseerrService
             using var client = _httpClientFactory.CreateClient("JellySeerr");
             client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
 
-            var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/user/{user.Id}";
+            var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/user/{user.Id}/settings/main";
             _logger.LogDebug(
-                "JellySeerr Integration: sending PUT {Url} for Jellyfin user '{Username}' (JellySeerr ID {UserId})",
+                "JellySeerr Integration: sending POST {Url} for Jellyfin user '{Username}' (JellySeerr ID {UserId})",
                 url,
                 jellyfinUsername,
                 user.Id);
 
             var body = new JellyseerrUpdateUserRequest { Email = email };
-            var response = await client.PutAsJsonAsync(url, body).ConfigureAwait(false);
+            var response = await client.PostAsJsonAsync(url, body).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
