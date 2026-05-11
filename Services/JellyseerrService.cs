@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
@@ -43,19 +44,23 @@ public class JellyseerrService
         var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
         if (user is null)
         {
+            _logger.LogWarning(
+                "JellySeerr Integration: no JellySeerr account matched Jellyfin user '{Username}' — suppressing prompt",
+                jellyfinUsername);
             return new EmailPromptStatusDto { NeedsEmail = false };
         }
 
         if (!string.IsNullOrWhiteSpace(user.Email))
         {
-            _logger.LogDebug(
-                "JellySeerr Integration: user '{Username}' already has an email set, suppressing prompt",
-                jellyfinUsername);
+            _logger.LogInformation(
+                "JellySeerr Integration: user '{Username}' has email set in JellySeerr (length {Len}) — suppressing prompt",
+                jellyfinUsername,
+                user.Email.Length);
             return new EmailPromptStatusDto { NeedsEmail = false };
         }
 
-        _logger.LogDebug(
-            "JellySeerr Integration: user '{Username}' has no email in JellySeerr, showing prompt",
+        _logger.LogInformation(
+            "JellySeerr Integration: user '{Username}' has no email in JellySeerr — showing prompt",
             jellyfinUsername);
         return new EmailPromptStatusDto { NeedsEmail = true };
     }
@@ -181,10 +186,12 @@ public class JellyseerrService
 
             if (match is null)
             {
-                _logger.LogDebug(
-                    "JellySeerr Integration: no JellySeerr user matched Jellyfin username '{Username}' in {Count} results",
+                var knownNames = string.Join(", ", response.Results.Select(u => u.JellyfinUsername ?? "(null)"));
+                _logger.LogWarning(
+                    "JellySeerr Integration: Jellyfin user '{Username}' not matched in {Count} Jellyseerr result(s). jellyfinUsername values: [{Known}]",
                     jellyfinUsername,
-                    response.Results.Count);
+                    response.Results.Count,
+                    knownNames);
             }
 
             return match;
