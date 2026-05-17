@@ -2,6 +2,7 @@
     'use strict';
 
     var DISMISSED_KEY = 'jellyseerrEmailPromptDismissed';
+    var DELETION_BTN_ID = 'jellyseerr-delete-request-btn';
     var checked = false;
 
     async function check() {
@@ -196,6 +197,123 @@
         banner.appendChild(dismissBtn);
     }
 
+    async function checkDeletionRequest() {
+        // Remove stale button from previous page navigation
+        var existing = document.getElementById(DELETION_BTN_ID);
+        if (existing) {
+            existing.remove();
+        }
+
+        var token;
+        try {
+            token = typeof ApiClient !== 'undefined' ? ApiClient.accessToken() : null;
+        } catch (e) {
+            return;
+        }
+        if (!token) {
+            return;
+        }
+
+        // Only run on detail/item pages
+        var hash = window.location.hash;
+        if (!hash.includes('details') && !hash.includes('item')) {
+            return;
+        }
+
+        var idMatch = hash.match(/[?&]id=([a-f0-9]+)/i);
+        if (!idMatch) {
+            return;
+        }
+        var jellyfinItemId = idMatch[1];
+
+        try {
+            var resp = await fetch(
+                '/JellyseerrIntegration/MediaRequest/Status?jellyfinItemId=' + jellyfinItemId,
+                { headers: { 'Authorization': 'MediaBrowser Token="' + token + '"' } }
+            );
+            if (!resp.ok) {
+                return;
+            }
+
+            var status = await resp.json();
+            if (status.hasRequest && status.hasEmail && status.webhookConfigured) {
+                showDeletionButton(token, status);
+            }
+        } catch (e) {
+            // Fail silently — never interrupt normal Jellyfin usage
+        }
+    }
+
+    function showDeletionButton(token, status) {
+        if (document.getElementById(DELETION_BTN_ID)) {
+            return;
+        }
+
+        var btn = document.createElement('button');
+        btn.id = DELETION_BTN_ID;
+        btn.textContent = 'Request Deletion';
+        btn.setAttribute('style', [
+            'position:fixed',
+            'bottom:16px',
+            'right:16px',
+            'z-index:99998',
+            'background:#c0392b',
+            'color:#fff',
+            'padding:8px 16px',
+            'border:none',
+            'border-radius:4px',
+            'font-size:13px',
+            'font-weight:bold',
+            'cursor:pointer',
+            'box-shadow:0 2px 6px rgba(0,0,0,.5)'
+        ].join(';'));
+
+        btn.addEventListener('click', async function () {
+            if (!window.confirm('Submit a request to have this item deleted from the library?')) {
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Sending…';
+
+            try {
+                var r = await fetch('/JellyseerrIntegration/DeletionRequest', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'MediaBrowser Token="' + token + '"',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        mediaType: status.mediaType,
+                        tmdbId: status.tmdbId,
+                        mediaTitle: status.mediaTitle
+                    })
+                });
+
+                if (r.ok || r.status === 204) {
+                    btn.textContent = 'Request Sent';
+                    btn.style.background = '#1a7a1a';
+                    setTimeout(function () {
+                        if (document.body.contains(btn)) {
+                            btn.remove();
+                        }
+                    }, 3000);
+                } else {
+                    btn.textContent = 'Failed — try again';
+                    btn.style.background = '#7a1a1a';
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                btn.textContent = 'Failed — try again';
+                btn.style.background = '#7a1a1a';
+                btn.disabled = false;
+            }
+        });
+
+        document.body.appendChild(btn);
+        watchForMedia(btn);
+    }
+
     // Poll every 500ms until ApiClient has an access token, then run the initial check.
     // Falls back to viewshow for SPA navigation after that.
     var initPoll = setInterval(function () {
@@ -203,6 +321,7 @@
             if (typeof ApiClient !== 'undefined' && ApiClient.accessToken()) {
                 clearInterval(initPoll);
                 check();
+                checkDeletionRequest();
             }
         } catch (e) {
             clearInterval(initPoll);
@@ -212,5 +331,8 @@
     // Give up if the client never becomes ready (e.g. user is on login page)
     setTimeout(function () { clearInterval(initPoll); }, 30000);
 
-    document.addEventListener('viewshow', check);
+    document.addEventListener('viewshow', function () {
+        check();
+        checkDeletionRequest();
+    });
 }());

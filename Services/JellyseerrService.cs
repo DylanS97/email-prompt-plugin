@@ -138,6 +138,165 @@ public class JellyseerrService
     }
 
     /// <summary>
+    /// Checks whether the given Jellyfin user has an active JellySeerr request for the specified media.
+    /// Returns a status object indicating whether the "Request Deletion" button should be shown.
+    /// </summary>
+    /// <param name="jellyfinUsername">The Jellyfin username of the current user.</param>
+    /// <param name="mediaType">"movie" or "tv".</param>
+    /// <param name="tmdbId">The TMDB ID of the media item.</param>
+    /// <param name="mediaTitle">The display title of the media item.</param>
+    /// <returns>Media request status for this user and media item.</returns>
+    public async Task<MediaRequestStatusDto> GetMediaRequestStatusAsync(
+        string jellyfinUsername,
+        string mediaType,
+        int tmdbId,
+        string mediaTitle)
+    {
+        var notFound = new MediaRequestStatusDto
+        {
+            MediaType = mediaType,
+            TmdbId = tmdbId,
+            MediaTitle = mediaTitle,
+        };
+
+        var config = Plugin.Instance?.Configuration;
+        if (config is null
+            || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
+            || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
+        {
+            return notFound;
+        }
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient("JellySeerr");
+            client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
+
+            var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/{mediaType}/{tmdbId}";
+            _logger.LogDebug(
+                "JellySeerr Integration: checking requests for {MediaType}/{TmdbId} at {Url}",
+                mediaType,
+                tmdbId,
+                url);
+
+            var detail = await client.GetFromJsonAsync<JellyseerrMediaDetailResponse>(url).ConfigureAwait(false);
+
+            var requests = detail?.MediaInfo?.Requests;
+            if (requests is null || requests.Count == 0)
+            {
+                return notFound;
+            }
+
+            var matchedRequest = requests.Find(r =>
+                string.Equals(
+                    r.RequestedBy?.JellyfinUsername,
+                    jellyfinUsername,
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (matchedRequest is null)
+            {
+                return notFound;
+            }
+
+            var requester = matchedRequest.RequestedBy!;
+            var hasEmail = !string.IsNullOrWhiteSpace(requester.Email)
+                           && requester.Email.Contains('@', StringComparison.Ordinal);
+
+            return new MediaRequestStatusDto
+            {
+                HasRequest = true,
+                HasEmail = hasEmail,
+                WebhookConfigured = !string.IsNullOrWhiteSpace(config.DeleteRequestWebhookUrl),
+                MediaType = mediaType,
+                TmdbId = tmdbId,
+                MediaTitle = mediaTitle,
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "JellySeerr Integration: failed to fetch media request status for {MediaType}/{TmdbId}",
+                mediaType,
+                tmdbId);
+            return notFound;
+        }
+    }
+
+    /// <summary>
+    /// Sends a deletion request webhook to the configured external URL on behalf of the given user.
+    /// </summary>
+    /// <param name="jellyfinUsername">The Jellyfin username of the requesting user.</param>
+    /// <param name="mediaTitle">The title of the media item to be deleted.</param>
+    /// <returns>True if the webhook was accepted (2xx), false otherwise.</returns>
+    public async Task<bool> SendDeletionWebhookAsync(string jellyfinUsername, string mediaTitle)
+    {
+        var config = Plugin.Instance?.Configuration;
+        if (config is null || string.IsNullOrWhiteSpace(config.DeleteRequestWebhookUrl))
+        {
+            _logger.LogWarning("JellySeerr Integration: deletion webhook URL is not configured");
+            return false;
+        }
+
+        var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
+        if (user is null)
+        {
+            _logger.LogWarning(
+                "JellySeerr Integration: cannot send deletion webhook for '{Username}' — user not found in JellySeerr",
+                jellyfinUsername);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Email) || !user.Email.Contains('@', StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "JellySeerr Integration: cannot send deletion webhook for '{Username}' — no email set in JellySeerr",
+                jellyfinUsername);
+            return false;
+        }
+
+        var name = !string.IsNullOrWhiteSpace(user.DisplayName) ? user.DisplayName : jellyfinUsername;
+        var payload = new
+        {
+            name,
+            email = user.Email,
+            subject = $"Deletion Request: {mediaTitle}",
+            message = $"User {name} is requesting the deletion of '{mediaTitle}' from the library.",
+        };
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient("JellySeerr");
+            var response = await client.PostAsJsonAsync(config.DeleteRequestWebhookUrl, payload).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                _logger.LogWarning(
+                    "JellySeerr Integration: deletion webhook returned {StatusCode} for '{Username}': {Body}",
+                    (int)response.StatusCode,
+                    jellyfinUsername,
+                    body);
+                return false;
+            }
+
+            _logger.LogInformation(
+                "JellySeerr Integration: deletion webhook sent successfully for '{Username}' — media: '{Title}'",
+                jellyfinUsername,
+                mediaTitle);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "JellySeerr Integration: exception while sending deletion webhook for '{Username}'",
+                jellyfinUsername);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Removes the cached user record for the given Jellyfin username, forcing a fresh lookup.
     /// </summary>
     /// <param name="jellyfinUsername">The Jellyfin username whose cache entry to remove.</param>

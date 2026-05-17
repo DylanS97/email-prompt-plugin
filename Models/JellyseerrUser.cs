@@ -24,4 +24,10 @@ public sealed class JellyseerrUser
     /// </summary>
     [JsonPropertyName("jellyfinUsername")]
     public string? JellyfinUsername { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display name shown in JellySeerr.
+    /// </summary>
+    [JsonPropertyName("displayName")]
+    public string? DisplayName { get; set; }
 }

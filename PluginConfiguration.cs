@@ -27,4 +27,10 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Supports the {username} placeholder to include the user's Jellyfin username.
     /// </summary>
     public string CustomFormUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the URL to POST deletion requests to. When set, a "Request Deletion" button is
+    /// shown to users who originally requested the media they are viewing.
+    /// </summary>
+    public string DeleteRequestWebhookUrl { get; set; } = string.Empty;
 }
