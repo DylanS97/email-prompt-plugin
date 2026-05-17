@@ -214,12 +214,7 @@
             return;
         }
 
-        // Only run on detail/item pages
         var hash = window.location.hash;
-        if (!hash.includes('details') && !hash.includes('item')) {
-            return;
-        }
-
         var idMatch = hash.match(/[?&]id=([a-f0-9]+)/i);
         if (!idMatch) {
             return;
