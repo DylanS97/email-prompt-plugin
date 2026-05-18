@@ -279,9 +279,9 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        mediaType: status.mediaType,
-                        tmdbId: status.tmdbId,
-                        mediaTitle: status.mediaTitle
+                        mediaType: status.MediaType,
+                        tmdbId: status.TmdbId,
+                        mediaTitle: status.MediaTitle
                     })
                 });
 
