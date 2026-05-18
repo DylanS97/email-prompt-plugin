@@ -12,8 +12,8 @@
                 "changelog": "",
                 "targetAbi": "10.11.0.0",
                 "sourceUrl": "https://github.com/DylanS97/email-prompt-plugin/releases/download/v10.0.2.2/jellyseerr-integration_10.0.2.2.zip",
-                "checksum": "6653fa3d749b77b9f2ca47507258ce19",
-                "timestamp": "2026-05-18T00:02:28Z"
+                "checksum": "2c45ec018ba5867d530120e2c8681cbb",
+                "timestamp": "2026-05-18T00:10:24Z"
             },
             {
                 "version": "10.0.2.1",
