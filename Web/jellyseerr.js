@@ -231,7 +231,7 @@
             }
 
             var status = await resp.json();
-            if (status.hasRequest && status.hasEmail && status.webhookConfigured) {
+            if (status.HasRequest && status.HasEmail && status.WebhookConfigured) {
                 showDeletionButton(token, status);
             }
         } catch (e) {
