@@ -414,25 +414,11 @@ public class JellyseerrService
         }
         else
         {
-            // Fall back to admin key; pass userId so the request is attributed to the user
-            var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
-            if (user is null)
-            {
-                _logger.LogWarning(
-                    "JellySeerr Integration: cannot submit request for '{Username}' — not found in JellySeerr",
-                    jellyfinUsername);
-                return DeletionRequestResult.Failure;
-            }
-
-            requestBody = seasons is not null
-                ? (object)new { mediaType, mediaId, seasons, userId = user.Id }
-                : (object)new { mediaType, mediaId, userId = user.Id };
-            _logger.LogDebug(
-                "JellySeerr Integration: submitting {MediaType}/{MediaId} via admin key for '{Username}' (userId={UserId})",
-                mediaType,
-                mediaId,
-                jellyfinUsername,
-                user.Id);
+            _logger.LogWarning(
+                "JellySeerr Integration: cannot submit request for '{Username}' — failed to obtain user session from JellySeerr. " +
+                "Ensure Jellyfin external auth is configured in JellySeerr settings.",
+                jellyfinUsername);
+            return DeletionRequestResult.Failure;
         }
 
         try
@@ -518,9 +504,11 @@ public class JellyseerrService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogDebug(
-                    "JellySeerr Integration: Jellyfin token exchange returned {Status} — falling back to admin key",
-                    (int)response.StatusCode);
+                var errorBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                _logger.LogWarning(
+                    "JellySeerr Integration: Jellyfin token exchange returned {Status}: {Body}",
+                    (int)response.StatusCode,
+                    errorBody);
                 return null;
             }
 
