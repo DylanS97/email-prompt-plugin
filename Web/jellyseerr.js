@@ -439,15 +439,15 @@
         container.appendChild(list);
 
         results.forEach(function (item) {
-            if (item.mediaStatus === 5) {
+            if (item.MediaStatus === 5) {
                 return;
             }
 
-            var displayTitle = item.title || item.name || 'Unknown';
-            var dateStr = item.releaseDate || item.firstAirDate || '';
+            var displayTitle = item.Title || item.Name || 'Unknown';
+            var dateStr = item.ReleaseDate || item.FirstAirDate || '';
             var year = dateStr ? dateStr.substring(0, 4) : '';
-            var mediaId = item.id;
-            var mediaType = item.mediaType;
+            var mediaId = item.Id;
+            var mediaType = item.MediaType;
 
             var card = document.createElement('div');
             card.setAttribute('style', [
@@ -460,9 +460,9 @@
                 'overflow:hidden'
             ].join(';'));
 
-            if (item.posterPath) {
+            if (item.PosterPath) {
                 var img = document.createElement('img');
-                img.src = TMDB_IMG_BASE + item.posterPath;
+                img.src = TMDB_IMG_BASE + item.PosterPath;
                 img.alt = displayTitle;
                 img.setAttribute('style', [
                     'width:46px',
@@ -494,9 +494,9 @@
             actionEl.setAttribute('style', 'flex-shrink:0');
 
             var pendingStatuses = { 2: 'Pending', 3: 'Processing', 4: 'Partially Available' };
-            if (pendingStatuses[item.mediaStatus]) {
+            if (pendingStatuses[item.MediaStatus]) {
                 var badge = document.createElement('span');
-                badge.textContent = pendingStatuses[item.mediaStatus];
+                badge.textContent = pendingStatuses[item.MediaStatus];
                 badge.setAttribute('style', [
                     'display:inline-block',
                     'padding:4px 10px',
