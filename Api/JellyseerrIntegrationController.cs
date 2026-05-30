@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -245,6 +246,93 @@ public class JellyseerrIntegrationController : ControllerBase
         {
             Models.DeletionRequestResult.Success => NoContent(),
             Models.DeletionRequestResult.Conflict => Conflict(new { message = "You already have a pending deletion request for this item." }),
+            _ => StatusCode(StatusCodes.Status502BadGateway),
+        };
+    }
+
+    /// <summary>
+    /// Searches JellySeerr for movies and TV shows matching the given query.
+    /// Person results and already-available items are excluded.
+    /// </summary>
+    /// <param name="query">The search term.</param>
+    /// <returns>List of requestable JellySeerr search results.</returns>
+    [HttpGet("Search")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IEnumerable<JellyseerrSearchResultDto>>> SearchMedia([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return BadRequest("query is required.");
+        }
+
+        var config = Plugin.Instance?.Configuration;
+        if (config is null
+            || !config.EnableSearchIntegration
+            || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
+            || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
+        {
+            return Ok(Array.Empty<JellyseerrSearchResultDto>());
+        }
+
+        var results = await _jellyseerrService.SearchMediaAsync(query).ConfigureAwait(false);
+        return Ok(results);
+    }
+
+    /// <summary>
+    /// Submits a media request to JellySeerr on behalf of the authenticated user.
+    /// </summary>
+    /// <param name="request">The media request details.</param>
+    /// <returns>204 No Content on success, 409 if already requested, 502 on failure.</returns>
+    [HttpPost("MediaRequest")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> SubmitMediaRequest([FromBody] SubmitMediaRequestDto request)
+    {
+        if (request is null
+            || (request.MediaType != "movie" && request.MediaType != "tv")
+            || request.MediaId <= 0)
+        {
+            return BadRequest("MediaType (\"movie\" or \"tv\") and a positive MediaId are required.");
+        }
+
+        var authInfo = await _authContext.GetAuthorizationInfo(Request).ConfigureAwait(false);
+        var user = authInfo.User;
+
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        var config = Plugin.Instance?.Configuration;
+        if (config is null
+            || !config.EnableSearchIntegration
+            || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
+            || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
+        {
+            return BadRequest("Search integration is not configured or disabled.");
+        }
+
+        _logger.LogInformation(
+            "JellySeerr Integration: '{Username}' requesting {MediaType}/{MediaId}",
+            user.Username,
+            request.MediaType,
+            request.MediaId);
+
+        var result = await _jellyseerrService
+            .SubmitMediaRequestAsync(user.Username, request.MediaType, request.MediaId)
+            .ConfigureAwait(false);
+
+        return result switch
+        {
+            DeletionRequestResult.Success => NoContent(),
+            DeletionRequestResult.Conflict => Conflict(new { message = "This item has already been requested." }),
             _ => StatusCode(StatusCodes.Status502BadGateway),
         };
     }

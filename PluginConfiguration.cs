@@ -18,6 +18,11 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableDeleteButton { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether JellySeerr search results are shown in Jellyfin search.
+    /// </summary>
+    public bool EnableSearchIntegration { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the JellySeerr base URL (no trailing slash), e.g. http://jellyseerr:5055.
     /// </summary>
     public string JellyseerrUrl { get; set; } = string.Empty;

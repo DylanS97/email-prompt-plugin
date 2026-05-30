@@ -288,10 +288,200 @@ public class JellyseerrService
     }
 
     /// <summary>
+    /// Searches JellySeerr for movies and TV shows matching the given query.
+    /// Person results and already-available items (status 5) are excluded.
+    /// Returns an empty list on any error.
+    /// </summary>
+    /// <param name="query">The search query string.</param>
+    /// <returns>List of simplified search result DTOs.</returns>
+    public async Task<List<JellyseerrSearchResultDto>> SearchMediaAsync(string query)
+    {
+        var config = Plugin.Instance?.Configuration;
+        if (config is null
+            || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
+            || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
+        {
+            return new List<JellyseerrSearchResultDto>();
+        }
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient("JellySeerr");
+            client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
+
+            var encodedQuery = Uri.EscapeDataString(query);
+            var url = $"{config.JellyseerrUrl.TrimEnd('/')}/api/v1/search?query={encodedQuery}";
+            _logger.LogDebug("JellySeerr Integration: searching for '{Query}' at {Url}", query, url);
+
+            var response = await client.GetFromJsonAsync<JellyseerrRawSearchResponse>(url).ConfigureAwait(false);
+
+            if (response?.Results is null)
+            {
+                return new List<JellyseerrSearchResultDto>();
+            }
+
+            var results = new List<JellyseerrSearchResultDto>(response.Results.Count);
+            foreach (var r in response.Results)
+            {
+                if (string.Equals(r.MediaType, "person", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var status = r.MediaInfo?.Status ?? 0;
+                if (status == 5)
+                {
+                    continue;
+                }
+
+                results.Add(new JellyseerrSearchResultDto
+                {
+                    Id = r.Id,
+                    MediaType = r.MediaType ?? string.Empty,
+                    Title = r.Title,
+                    Name = r.Name,
+                    PosterPath = r.PosterPath,
+                    ReleaseDate = r.ReleaseDate,
+                    FirstAirDate = r.FirstAirDate,
+                    MediaStatus = status,
+                });
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "JellySeerr Integration: failed to search for '{Query}'", query);
+            return new List<JellyseerrSearchResultDto>();
+        }
+    }
+
+    /// <summary>
+    /// Submits a media request to JellySeerr on behalf of the given Jellyfin user.
+    /// For TV shows, all available seasons (season number > 0) are requested automatically.
+    /// </summary>
+    /// <param name="jellyfinUsername">Jellyfin username used to look up the JellySeerr user ID.</param>
+    /// <param name="mediaType">"movie" or "tv".</param>
+    /// <param name="mediaId">TMDB ID of the media to request.</param>
+    /// <returns>Result indicating success, conflict (already requested), or failure.</returns>
+    public async Task<DeletionRequestResult> SubmitMediaRequestAsync(
+        string jellyfinUsername,
+        string mediaType,
+        int mediaId)
+    {
+        var config = Plugin.Instance?.Configuration;
+        if (config is null
+            || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
+            || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
+        {
+            _logger.LogWarning("JellySeerr Integration: cannot submit request — plugin is not configured");
+            return DeletionRequestResult.Failure;
+        }
+
+        var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
+        if (user is null)
+        {
+            _logger.LogWarning(
+                "JellySeerr Integration: cannot submit request for '{Username}' — not found in JellySeerr",
+                jellyfinUsername);
+            return DeletionRequestResult.Failure;
+        }
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient("JellySeerr");
+            client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
+
+            var baseUrl = config.JellyseerrUrl.TrimEnd('/');
+
+            int[]? seasons = null;
+            if (string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase))
+            {
+                seasons = await FetchTvSeasonsAsync(client, baseUrl, mediaId).ConfigureAwait(false);
+            }
+
+            var requestBody = seasons is not null
+                ? (object)new { mediaType, mediaId, seasons, userId = user.Id }
+                : (object)new { mediaType, mediaId, userId = user.Id };
+
+            var requestUrl = $"{baseUrl}/api/v1/request";
+            _logger.LogDebug(
+                "JellySeerr Integration: submitting {MediaType} request for TMDB {MediaId} on behalf of '{Username}'",
+                mediaType,
+                mediaId,
+                jellyfinUsername);
+
+            var response = await client.PostAsJsonAsync(requestUrl, requestBody).ConfigureAwait(false);
+
+            if ((int)response.StatusCode == 409)
+            {
+                _logger.LogInformation(
+                    "JellySeerr Integration: {MediaType}/{MediaId} already requested",
+                    mediaType,
+                    mediaId);
+                return DeletionRequestResult.Conflict;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                _logger.LogWarning(
+                    "JellySeerr Integration: request endpoint returned {StatusCode} for {MediaType}/{MediaId}: {Body}",
+                    (int)response.StatusCode,
+                    mediaType,
+                    mediaId,
+                    body);
+                return DeletionRequestResult.Failure;
+            }
+
+            _logger.LogInformation(
+                "JellySeerr Integration: request submitted for {MediaType}/{MediaId} by '{Username}'",
+                mediaType,
+                mediaId,
+                jellyfinUsername);
+            return DeletionRequestResult.Success;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "JellySeerr Integration: exception submitting request for {MediaType}/{MediaId}",
+                mediaType,
+                mediaId);
+            return DeletionRequestResult.Failure;
+        }
+    }
+
+    /// <summary>
     /// Removes the cached user record for the given Jellyfin username, forcing a fresh lookup.
     /// </summary>
     /// <param name="jellyfinUsername">The Jellyfin username whose cache entry to remove.</param>
     public void InvalidateCache(string jellyfinUsername) => _cache.Remove(jellyfinUsername);
+
+    private async Task<int[]?> FetchTvSeasonsAsync(HttpClient client, string baseUrl, int tvId)
+    {
+        try
+        {
+            var url = $"{baseUrl}/api/v1/tv/{tvId}";
+            var detail = await client.GetFromJsonAsync<JellyseerrTvDetailResponse>(url).ConfigureAwait(false);
+            if (detail?.Seasons is null || detail.Seasons.Count == 0)
+            {
+                return null;
+            }
+
+            var seasonNumbers = detail.Seasons
+                .Where(s => s.SeasonNumber > 0)
+                .Select(s => s.SeasonNumber)
+                .ToArray();
+
+            return seasonNumbers.Length > 0 ? seasonNumbers : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "JellySeerr Integration: failed to fetch season list for TV/{TvId}", tvId);
+            return null;
+        }
+    }
 
     private async Task<JellyseerrUser?> FindUserAsync(string jellyfinUsername)
     {

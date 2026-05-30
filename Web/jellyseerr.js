@@ -318,6 +318,294 @@
         watchForMedia(btn);
     }
 
+    // ----- JellySeerr Search Integration -----
+
+    var SEARCH_CONTAINER_ID = 'jellyseerr-search-results';
+    var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w92';
+    var searchDebounceTimer = null;
+    var lastSearchQuery = null;
+
+    function getSearchQuery() {
+        var hash = window.location.hash;
+        var match = hash.match(/[?&]query=([^&]*)/);
+        if (!match) {
+            return null;
+        }
+        try {
+            return decodeURIComponent(match[1].replace(/\+/g, ' '));
+        } catch (e) {
+            return match[1];
+        }
+    }
+
+    function isSearchPage() {
+        return window.location.hash.indexOf('search.html') !== -1;
+    }
+
+    function removeSearchContainer() {
+        var existing = document.getElementById(SEARCH_CONTAINER_ID);
+        if (existing) {
+            existing.remove();
+        }
+    }
+
+    function findSearchInsertTarget(cb) {
+        var attempts = 0;
+        var poll = setInterval(function () {
+            attempts++;
+            var target = document.querySelector('.searchResults')
+                || document.querySelector('.itemsContainer')
+                || document.querySelector('.padded-left.padded-right-withalphapicker')
+                || document.querySelector('[data-role="content"] .content-primary')
+                || null;
+            if (target || attempts >= 30) {
+                clearInterval(poll);
+                cb(target);
+            }
+        }, 100);
+    }
+
+    async function runSearch(query, token) {
+        removeSearchContainer();
+        if (!query) {
+            return;
+        }
+
+        var container = document.createElement('div');
+        container.id = SEARCH_CONTAINER_ID;
+        container.setAttribute('style', [
+            'padding:16px',
+            'margin-top:8px'
+        ].join(';'));
+
+        var heading = document.createElement('h2');
+        heading.textContent = 'Request from JellySeerr';
+        heading.setAttribute('style', [
+            'font-size:16px',
+            'font-weight:bold',
+            'margin:0 0 10px 0',
+            'color:#ddd'
+        ].join(';'));
+        container.appendChild(heading);
+
+        var loadingSpan = document.createElement('span');
+        loadingSpan.textContent = 'Searching…';
+        loadingSpan.setAttribute('style', 'color:#aaa;font-size:13px');
+        container.appendChild(loadingSpan);
+
+        findSearchInsertTarget(function (target) {
+            if (!target) {
+                return;
+            }
+            target.parentNode.insertBefore(container, target.nextSibling);
+        });
+
+        var results;
+        try {
+            var resp = await fetch(
+                '/JellyseerrIntegration/Search?query=' + encodeURIComponent(query),
+                { headers: { 'Authorization': 'MediaBrowser Token="' + token + '"' } }
+            );
+            if (!resp.ok) {
+                container.remove();
+                return;
+            }
+            results = await resp.json();
+        } catch (e) {
+            container.remove();
+            return;
+        }
+
+        // Re-check the container is still relevant (user may have navigated away)
+        if (document.getElementById(SEARCH_CONTAINER_ID) !== container) {
+            return;
+        }
+
+        container.removeChild(loadingSpan);
+
+        if (!results || results.length === 0) {
+            var none = document.createElement('span');
+            none.textContent = 'No requestable titles found.';
+            none.setAttribute('style', 'color:#aaa;font-size:13px');
+            container.appendChild(none);
+            return;
+        }
+
+        var list = document.createElement('div');
+        list.setAttribute('style', 'display:flex;flex-direction:column;gap:8px');
+        container.appendChild(list);
+
+        results.forEach(function (item) {
+            if (item.mediaStatus === 5) {
+                return;
+            }
+
+            var displayTitle = item.title || item.name || 'Unknown';
+            var dateStr = item.releaseDate || item.firstAirDate || '';
+            var year = dateStr ? dateStr.substring(0, 4) : '';
+            var mediaId = item.id;
+            var mediaType = item.mediaType;
+
+            var card = document.createElement('div');
+            card.setAttribute('style', [
+                'display:flex',
+                'align-items:center',
+                'gap:12px',
+                'background:#1a1a1a',
+                'border-radius:6px',
+                'padding:8px 12px',
+                'overflow:hidden'
+            ].join(';'));
+
+            if (item.posterPath) {
+                var img = document.createElement('img');
+                img.src = TMDB_IMG_BASE + item.posterPath;
+                img.alt = displayTitle;
+                img.setAttribute('style', [
+                    'width:46px',
+                    'height:69px',
+                    'object-fit:cover',
+                    'border-radius:3px',
+                    'flex-shrink:0'
+                ].join(';'));
+                img.onerror = function () { img.style.display = 'none'; };
+                card.appendChild(img);
+            }
+
+            var info = document.createElement('div');
+            info.setAttribute('style', 'flex:1;min-width:0');
+
+            var titleEl = document.createElement('div');
+            titleEl.setAttribute('style', 'font-size:14px;font-weight:bold;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
+            titleEl.textContent = year ? displayTitle + ' (' + year + ')' : displayTitle;
+            info.appendChild(titleEl);
+
+            var typeEl = document.createElement('div');
+            typeEl.setAttribute('style', 'font-size:11px;color:#aaa;margin-top:2px');
+            typeEl.textContent = mediaType === 'tv' ? 'TV Series' : 'Movie';
+            info.appendChild(typeEl);
+
+            card.appendChild(info);
+
+            var actionEl = document.createElement('div');
+            actionEl.setAttribute('style', 'flex-shrink:0');
+
+            var pendingStatuses = { 2: 'Pending', 3: 'Processing', 4: 'Partially Available' };
+            if (pendingStatuses[item.mediaStatus]) {
+                var badge = document.createElement('span');
+                badge.textContent = pendingStatuses[item.mediaStatus];
+                badge.setAttribute('style', [
+                    'display:inline-block',
+                    'padding:4px 10px',
+                    'border-radius:4px',
+                    'background:#444',
+                    'color:#bbb',
+                    'font-size:12px'
+                ].join(';'));
+                actionEl.appendChild(badge);
+            } else {
+                var btn = document.createElement('button');
+                btn.textContent = 'Request';
+                btn.setAttribute('style', [
+                    'padding:5px 14px',
+                    'border-radius:4px',
+                    'border:none',
+                    'background:#2196f3',
+                    'color:#fff',
+                    'font-size:13px',
+                    'font-weight:bold',
+                    'cursor:pointer'
+                ].join(';'));
+
+                btn.addEventListener('click', async function () {
+                    btn.disabled = true;
+                    btn.textContent = 'Sending…';
+                    btn.style.background = '#555';
+
+                    try {
+                        var currentToken;
+                        try {
+                            currentToken = ApiClient.accessToken();
+                        } catch (e) {
+                            currentToken = null;
+                        }
+                        if (!currentToken) {
+                            btn.textContent = 'Not signed in';
+                            return;
+                        }
+
+                        var r = await fetch('/JellyseerrIntegration/MediaRequest', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'MediaBrowser Token="' + currentToken + '"',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ mediaType: mediaType, mediaId: mediaId })
+                        });
+
+                        if (r.status === 409) {
+                            btn.textContent = 'Already Requested';
+                            btn.style.background = '#444';
+                            btn.style.color = '#aaa';
+                        } else if (r.ok || r.status === 204) {
+                            btn.textContent = 'Requested ✓';
+                            btn.style.background = '#1a7a1a';
+                        } else {
+                            btn.textContent = 'Failed — retry';
+                            btn.style.background = '#7a1a1a';
+                            btn.disabled = false;
+                        }
+                    } catch (e) {
+                        btn.textContent = 'Failed — retry';
+                        btn.style.background = '#7a1a1a';
+                        btn.disabled = false;
+                    }
+                });
+
+                actionEl.appendChild(btn);
+            }
+
+            card.appendChild(actionEl);
+            list.appendChild(card);
+        });
+    }
+
+    function checkSearchPage() {
+        if (!isSearchPage()) {
+            removeSearchContainer();
+            return;
+        }
+
+        var query = getSearchQuery();
+        if (query === lastSearchQuery) {
+            return;
+        }
+        lastSearchQuery = query;
+
+        clearTimeout(searchDebounceTimer);
+
+        if (!query) {
+            removeSearchContainer();
+            return;
+        }
+
+        var token;
+        try {
+            token = typeof ApiClient !== 'undefined' ? ApiClient.accessToken() : null;
+        } catch (e) {
+            return;
+        }
+        if (!token) {
+            return;
+        }
+
+        searchDebounceTimer = setTimeout(function () {
+            runSearch(query, token);
+        }, 400);
+    }
+
+    // ----- Initialisation -----
+
     // Poll every 500ms until ApiClient has an access token, then run the initial check.
     // Falls back to viewshow for SPA navigation after that.
     var initPoll = setInterval(function () {
@@ -326,6 +614,7 @@
                 clearInterval(initPoll);
                 check();
                 checkDeletionRequest();
+                checkSearchPage();
             }
         } catch (e) {
             clearInterval(initPoll);
@@ -336,7 +625,9 @@
     setTimeout(function () { clearInterval(initPoll); }, 30000);
 
     document.addEventListener('viewshow', function () {
+        lastSearchQuery = null;
         check();
         checkDeletionRequest();
+        checkSearchPage();
     });
 }());
