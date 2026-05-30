@@ -323,22 +323,9 @@
     var SEARCH_CONTAINER_ID = 'jellyseerr-search-results';
     var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w92';
     var searchDebounceTimer = null;
-    var lastSearchQuery = null;
-    var searchPagePollTimer = null;
     var currentSearchId = 0;
-
-    function getSearchQuery() {
-        var hash = window.location.hash;
-        var match = hash.match(/[?&]query=([^&]*)/);
-        if (!match || !match[1]) {
-            return null;
-        }
-        try {
-            return decodeURIComponent(match[1].replace(/\+/g, ' ')) || null;
-        } catch (e) {
-            return match[1] || null;
-        }
-    }
+    var attachedSearchInput = null;
+    var boundSearchInputHandler = null;
 
     function isSearchPage() {
         var hash = window.location.hash;
@@ -354,64 +341,63 @@
         }
     }
 
-    function startSearchPagePolling() {
-        if (searchPagePollTimer) {
+    function detachSearchInput() {
+        if (attachedSearchInput && boundSearchInputHandler) {
+            attachedSearchInput.removeEventListener('input', boundSearchInputHandler);
+        }
+        attachedSearchInput = null;
+        boundSearchInputHandler = null;
+        clearTimeout(searchDebounceTimer);
+        ++currentSearchId;
+        removeSearchContainer();
+    }
+
+    function onSearchInput() {
+        var query = attachedSearchInput ? attachedSearchInput.value.trim() : '';
+        clearTimeout(searchDebounceTimer);
+        var sid = ++currentSearchId;
+
+        if (!query) {
+            removeSearchContainer();
             return;
         }
-        searchPagePollTimer = setInterval(function () {
-            if (!isSearchPage()) {
-                stopSearchPagePolling();
-                removeSearchContainer();
-                lastSearchQuery = null;
-                return;
-            }
 
-            var query = getSearchQuery();
-            if (query === lastSearchQuery) {
-                return;
-            }
-            lastSearchQuery = query;
-
-            clearTimeout(searchDebounceTimer);
-            var sid = ++currentSearchId;
-
-            if (!query) {
-                removeSearchContainer();
-                return;
-            }
-
-            var token;
-            try {
-                token = typeof ApiClient !== 'undefined' ? ApiClient.accessToken() : null;
-            } catch (e) {
-                return;
-            }
-            if (!token) {
-                return;
-            }
-
-            searchDebounceTimer = setTimeout(function () {
-                runSearch(query, token, sid);
-            }, 400);
-        }, 300);
-    }
-
-    function stopSearchPagePolling() {
-        if (searchPagePollTimer) {
-            clearInterval(searchPagePollTimer);
-            searchPagePollTimer = null;
+        var token;
+        try {
+            token = typeof ApiClient !== 'undefined' ? ApiClient.accessToken() : null;
+        } catch (e) {
+            return;
         }
+        if (!token) {
+            return;
+        }
+
+        searchDebounceTimer = setTimeout(function () {
+            runSearch(query, token, sid);
+        }, 400);
     }
 
-    function findInsertTarget() {
-        return document.querySelector('.searchResults')
-            || document.querySelector('.noItemsMessage')
-            || document.querySelector('.itemsContainer')
-            || document.querySelector('.focuscontainer-x')
-            || document.querySelector('.pageTabContent')
-            || document.querySelector('.mainAnimatedPage')
-            || document.querySelector('[data-role="content"] .content-primary')
-            || null;
+    function attachSearchInput() {
+        // Poll briefly for the input — it may not be in the DOM immediately after viewshow
+        var attempts = 0;
+        var poll = setInterval(function () {
+            attempts++;
+            var input = document.getElementById('searchTextInput');
+            if (input || attempts >= 30) {
+                clearInterval(poll);
+                if (!input || input === attachedSearchInput) {
+                    return;
+                }
+                detachSearchInput();
+                attachedSearchInput = input;
+                boundSearchInputHandler = onSearchInput;
+                input.addEventListener('input', boundSearchInputHandler);
+                // Trigger immediately if the input already has a value (e.g. page reload)
+                if (input.value.trim()) {
+                    onSearchInput();
+                }
+            }
+        }, 100);
     }
 
     async function runSearch(query, token, sid) {
@@ -437,26 +423,17 @@
 
         var container = buildResultsContainer(results);
 
-        var attempts = 0;
-        var insertPoll = setInterval(function () {
-            if (sid !== currentSearchId) {
-                clearInterval(insertPoll);
-                return;
-            }
-            attempts++;
-            var target = findInsertTarget();
-            if (target || attempts >= 30) {
-                clearInterval(insertPoll);
-                if (sid !== currentSearchId) {
-                    return;
-                }
-                if (target) {
-                    target.parentNode.insertBefore(container, target.nextSibling);
-                } else {
-                    document.body.appendChild(container);
-                }
-            }
-        }, 100);
+        // #searchPage is the stable root element present on the search page
+        var searchPage = document.getElementById('searchPage');
+        if (searchPage && sid === currentSearchId) {
+            searchPage.appendChild(container);
+            return;
+        }
+
+        // Fallback for unexpected page structures
+        if (sid === currentSearchId) {
+            document.body.appendChild(container);
+        }
     }
 
     function formatDate(dateStr) {
@@ -630,11 +607,9 @@
 
     function checkSearchPage() {
         if (isSearchPage()) {
-            startSearchPagePolling();
+            attachSearchInput();
         } else {
-            stopSearchPagePolling();
-            removeSearchContainer();
-            lastSearchQuery = null;
+            detachSearchInput();
         }
     }
 
