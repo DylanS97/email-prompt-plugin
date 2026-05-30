@@ -324,17 +324,19 @@
     var TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w92';
     var searchDebounceTimer = null;
     var lastSearchQuery = null;
+    var searchPagePollTimer = null;
+    var currentSearchId = 0;
 
     function getSearchQuery() {
         var hash = window.location.hash;
         var match = hash.match(/[?&]query=([^&]*)/);
-        if (!match) {
+        if (!match || !match[1]) {
             return null;
         }
         try {
-            return decodeURIComponent(match[1].replace(/\+/g, ' '));
+            return decodeURIComponent(match[1].replace(/\+/g, ' ')) || null;
         } catch (e) {
-            return match[1];
+            return match[1] || null;
         }
     }
 
@@ -352,56 +354,68 @@
         }
     }
 
-    function findSearchInsertTarget(cb) {
-        var attempts = 0;
-        var poll = setInterval(function () {
-            attempts++;
-            var target = document.querySelector('.searchResults')
-                || document.querySelector('.itemsContainer')
-                || document.querySelector('.padded-left.padded-right-withalphapicker')
-                || document.querySelector('[data-role="content"] .content-primary')
-                || null;
-            if (target || attempts >= 30) {
-                clearInterval(poll);
-                cb(target);
-            }
-        }, 100);
-    }
-
-    async function runSearch(query, token) {
-        removeSearchContainer();
-        if (!query) {
+    function startSearchPagePolling() {
+        if (searchPagePollTimer) {
             return;
         }
-
-        var container = document.createElement('div');
-        container.id = SEARCH_CONTAINER_ID;
-        container.setAttribute('style', [
-            'padding:16px',
-            'margin-top:8px'
-        ].join(';'));
-
-        var heading = document.createElement('h2');
-        heading.textContent = 'Request from JellySeerr';
-        heading.setAttribute('style', [
-            'font-size:16px',
-            'font-weight:bold',
-            'margin:0 0 10px 0',
-            'color:#ddd'
-        ].join(';'));
-        container.appendChild(heading);
-
-        var loadingSpan = document.createElement('span');
-        loadingSpan.textContent = 'Searching…';
-        loadingSpan.setAttribute('style', 'color:#aaa;font-size:13px');
-        container.appendChild(loadingSpan);
-
-        findSearchInsertTarget(function (target) {
-            if (!target) {
+        searchPagePollTimer = setInterval(function () {
+            if (!isSearchPage()) {
+                stopSearchPagePolling();
+                removeSearchContainer();
+                lastSearchQuery = null;
                 return;
             }
-            target.parentNode.insertBefore(container, target.nextSibling);
-        });
+
+            var query = getSearchQuery();
+            if (query === lastSearchQuery) {
+                return;
+            }
+            lastSearchQuery = query;
+
+            clearTimeout(searchDebounceTimer);
+            var sid = ++currentSearchId;
+
+            if (!query) {
+                removeSearchContainer();
+                return;
+            }
+
+            var token;
+            try {
+                token = typeof ApiClient !== 'undefined' ? ApiClient.accessToken() : null;
+            } catch (e) {
+                return;
+            }
+            if (!token) {
+                return;
+            }
+
+            searchDebounceTimer = setTimeout(function () {
+                runSearch(query, token, sid);
+            }, 400);
+        }, 300);
+    }
+
+    function stopSearchPagePolling() {
+        if (searchPagePollTimer) {
+            clearInterval(searchPagePollTimer);
+            searchPagePollTimer = null;
+        }
+    }
+
+    function findInsertTarget() {
+        return document.querySelector('.searchResults')
+            || document.querySelector('.noItemsMessage')
+            || document.querySelector('.itemsContainer')
+            || document.querySelector('.focuscontainer-x')
+            || document.querySelector('.pageTabContent')
+            || document.querySelector('.mainAnimatedPage')
+            || document.querySelector('[data-role="content"] .content-primary')
+            || null;
+    }
+
+    async function runSearch(query, token, sid) {
+        removeSearchContainer();
 
         var results;
         try {
@@ -410,29 +424,50 @@
                 { headers: { 'Authorization': 'MediaBrowser Token="' + token + '"' } }
             );
             if (!resp.ok) {
-                container.remove();
                 return;
             }
             results = await resp.json();
         } catch (e) {
-            container.remove();
             return;
         }
 
-        // Re-check the container is still relevant (user may have navigated away)
-        if (document.getElementById(SEARCH_CONTAINER_ID) !== container) {
+        if (sid !== currentSearchId || !results || results.length === 0) {
             return;
         }
 
-        container.removeChild(loadingSpan);
+        var container = buildResultsContainer(results);
 
-        if (!results || results.length === 0) {
-            var none = document.createElement('span');
-            none.textContent = 'No requestable titles found.';
-            none.setAttribute('style', 'color:#aaa;font-size:13px');
-            container.appendChild(none);
-            return;
-        }
+        var attempts = 0;
+        var insertPoll = setInterval(function () {
+            if (sid !== currentSearchId) {
+                clearInterval(insertPoll);
+                return;
+            }
+            attempts++;
+            var target = findInsertTarget();
+            if (target || attempts >= 30) {
+                clearInterval(insertPoll);
+                if (sid !== currentSearchId) {
+                    return;
+                }
+                if (target) {
+                    target.parentNode.insertBefore(container, target.nextSibling);
+                } else {
+                    document.body.appendChild(container);
+                }
+            }
+        }, 100);
+    }
+
+    function buildResultsContainer(results) {
+        var container = document.createElement('div');
+        container.id = SEARCH_CONTAINER_ID;
+        container.setAttribute('style', 'padding:16px;margin-top:8px');
+
+        var heading = document.createElement('h2');
+        heading.textContent = 'Request from JellySeerr';
+        heading.setAttribute('style', 'font-size:16px;font-weight:bold;margin:0 0 10px 0;color:#ddd');
+        container.appendChild(heading);
 
         var list = document.createElement('div');
         list.setAttribute('style', 'display:flex;flex-direction:column;gap:8px');
@@ -571,46 +606,23 @@
             card.appendChild(actionEl);
             list.appendChild(card);
         });
+
+        return container;
     }
 
     function checkSearchPage() {
-        if (!isSearchPage()) {
+        if (isSearchPage()) {
+            startSearchPagePolling();
+        } else {
+            stopSearchPagePolling();
             removeSearchContainer();
-            return;
+            lastSearchQuery = null;
         }
-
-        var query = getSearchQuery();
-        if (query === lastSearchQuery) {
-            return;
-        }
-        lastSearchQuery = query;
-
-        clearTimeout(searchDebounceTimer);
-
-        if (!query) {
-            removeSearchContainer();
-            return;
-        }
-
-        var token;
-        try {
-            token = typeof ApiClient !== 'undefined' ? ApiClient.accessToken() : null;
-        } catch (e) {
-            return;
-        }
-        if (!token) {
-            return;
-        }
-
-        searchDebounceTimer = setTimeout(function () {
-            runSearch(query, token);
-        }, 400);
     }
 
     // ----- Initialisation -----
 
     // Poll every 500ms until ApiClient has an access token, then run the initial check.
-    // Falls back to viewshow for SPA navigation after that.
     var initPoll = setInterval(function () {
         try {
             if (typeof ApiClient !== 'undefined' && ApiClient.accessToken()) {
@@ -628,14 +640,8 @@
     setTimeout(function () { clearInterval(initPoll); }, 30000);
 
     document.addEventListener('viewshow', function () {
-        lastSearchQuery = null;
         check();
         checkDeletionRequest();
-        checkSearchPage();
-    });
-
-    // Jellyfin updates the hash (e.g. query param) without firing viewshow on every keystroke.
-    window.addEventListener('hashchange', function () {
         checkSearchPage();
     });
 }());
