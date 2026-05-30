@@ -459,6 +459,21 @@
         }, 100);
     }
 
+    function formatDate(dateStr) {
+        if (!dateStr) {
+            return '';
+        }
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        var parts = dateStr.split('-');
+        var year = parts[0];
+        var month = parts[1] ? months[parseInt(parts[1], 10) - 1] : null;
+        var day = parts[2] ? parseInt(parts[2], 10) : null;
+        if (month && day) {
+            return month + ' ' + day + ', ' + year;
+        }
+        return month ? month + ' ' + year : year;
+    }
+
     function buildResultsContainer(results) {
         var container = document.createElement('div');
         container.id = SEARCH_CONTAINER_ID;
@@ -480,9 +495,10 @@
 
             var displayTitle = item.Title || item.Name || 'Unknown';
             var dateStr = item.ReleaseDate || item.FirstAirDate || '';
-            var year = dateStr ? dateStr.substring(0, 4) : '';
+            var formattedDate = formatDate(dateStr);
             var mediaId = item.Id;
             var mediaType = item.MediaType;
+            var typeLabel = mediaType === 'tv' ? 'TV Series' : 'Movie';
 
             var card = document.createElement('div');
             card.setAttribute('style', [
@@ -495,33 +511,35 @@
                 'overflow:hidden'
             ].join(';'));
 
-            if (item.PosterPath) {
-                var img = document.createElement('img');
-                img.src = TMDB_IMG_BASE + item.PosterPath;
-                img.alt = displayTitle;
-                img.setAttribute('style', [
-                    'width:46px',
-                    'height:69px',
-                    'object-fit:cover',
-                    'border-radius:3px',
-                    'flex-shrink:0'
-                ].join(';'));
-                img.onerror = function () { img.style.display = 'none'; };
-                card.appendChild(img);
+            var img = document.createElement('img');
+            img.src = item.PosterPath ? TMDB_IMG_BASE + item.PosterPath : '';
+            img.alt = displayTitle;
+            img.setAttribute('style', [
+                'width:54px',
+                'height:81px',
+                'object-fit:cover',
+                'border-radius:3px',
+                'flex-shrink:0',
+                'background:#333'
+            ].join(';'));
+            if (!item.PosterPath) {
+                img.style.display = 'none';
             }
+            img.onerror = function () { img.style.display = 'none'; };
+            card.appendChild(img);
 
             var info = document.createElement('div');
             info.setAttribute('style', 'flex:1;min-width:0');
 
             var titleEl = document.createElement('div');
             titleEl.setAttribute('style', 'font-size:14px;font-weight:bold;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
-            titleEl.textContent = year ? displayTitle + ' (' + year + ')' : displayTitle;
+            titleEl.textContent = displayTitle;
             info.appendChild(titleEl);
 
-            var typeEl = document.createElement('div');
-            typeEl.setAttribute('style', 'font-size:11px;color:#aaa;margin-top:2px');
-            typeEl.textContent = mediaType === 'tv' ? 'TV Series' : 'Movie';
-            info.appendChild(typeEl);
+            var metaEl = document.createElement('div');
+            metaEl.setAttribute('style', 'font-size:11px;color:#aaa;margin-top:3px');
+            metaEl.textContent = formattedDate ? typeLabel + ' · ' + formattedDate : typeLabel;
+            info.appendChild(metaEl);
 
             card.appendChild(info);
 
