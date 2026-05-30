@@ -553,7 +553,15 @@
                 'cursor:pointer'
             ].join(';'));
 
+            var loginMode = false;
+            var loginUrl = '';
+
             btn.addEventListener('click', async function () {
+                if (loginMode) {
+                    window.open(loginUrl, '_blank');
+                    return;
+                }
+
                 btn.disabled = true;
                 btn.textContent = 'Sending…';
                 btn.style.background = '#555';
@@ -570,16 +578,37 @@
                         return;
                     }
 
-                    var r = await fetch('/JellyseerrIntegration/MediaRequest', {
+                    var prepResp = await fetch(
+                        '/JellyseerrIntegration/MediaRequest/Prep?mediaType=' + encodeURIComponent(mediaType) + '&mediaId=' + mediaId,
+                        { headers: { 'Authorization': 'MediaBrowser Token="' + currentToken + '"' } }
+                    );
+                    if (!prepResp.ok) {
+                        btn.textContent = 'Failed — retry';
+                        btn.style.background = '#7a1a1a';
+                        btn.disabled = false;
+                        return;
+                    }
+                    var prep = await prepResp.json();
+
+                    var reqBody = { mediaType: mediaType, mediaId: mediaId };
+                    if (prep.seasons) {
+                        reqBody.seasons = prep.seasons;
+                    }
+
+                    var r = await fetch(prep.jellyseerrUrl + '/api/v1/request', {
                         method: 'POST',
-                        headers: {
-                            'Authorization': 'MediaBrowser Token="' + currentToken + '"',
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ mediaType: mediaType, mediaId: mediaId })
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(reqBody)
                     });
 
-                    if (r.status === 409) {
+                    if (r.status === 401 || r.status === 403) {
+                        loginMode = true;
+                        loginUrl = prep.jellyseerrUrl;
+                        btn.textContent = 'Log in to JellySeerr ↗';
+                        btn.style.background = '#b87800';
+                        btn.disabled = false;
+                    } else if (r.status === 409) {
                         btn.textContent = 'Already Requested';
                         btn.style.background = '#444';
                         btn.style.color = '#aaa';
