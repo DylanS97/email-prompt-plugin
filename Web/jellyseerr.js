@@ -423,17 +423,38 @@
 
         var container = buildResultsContainer(results);
 
-        // #searchPage is the stable root element present on the search page
-        var searchPage = document.getElementById('searchPage');
-        if (searchPage && sid === currentSearchId) {
-            searchPage.appendChild(container);
-            return;
-        }
+        // Wait for Jellyfin's own results (or no-results message) to render, then
+        // insert our section directly after them so we always appear below Jellyfin's content.
+        var attempts = 0;
+        var insertPoll = setInterval(function () {
+            if (sid !== currentSearchId) {
+                clearInterval(insertPoll);
+                return;
+            }
+            attempts++;
 
-        // Fallback for unexpected page structures
-        if (sid === currentSearchId) {
-            document.body.appendChild(container);
-        }
+            var jellyfinContent = document.querySelector('#searchPage .searchResults')
+                || document.querySelector('#searchPage .noItemsMessage')
+                || document.querySelector('#searchPage .itemsContainer');
+
+            if (jellyfinContent || attempts >= 30) {
+                clearInterval(insertPoll);
+                if (sid !== currentSearchId) {
+                    return;
+                }
+
+                if (jellyfinContent) {
+                    jellyfinContent.parentNode.insertBefore(container, jellyfinContent.nextSibling);
+                } else {
+                    var searchPage = document.getElementById('searchPage');
+                    if (searchPage) {
+                        searchPage.appendChild(container);
+                    } else {
+                        document.body.appendChild(container);
+                    }
+                }
+            }
+        }, 100);
     }
 
     function formatDate(dateStr) {

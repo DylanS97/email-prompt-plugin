@@ -326,7 +326,7 @@ public class JellyseerrIntegrationController : ControllerBase
             request.MediaId);
 
         var result = await _jellyseerrService
-            .SubmitMediaRequestAsync(user.Username, request.MediaType, request.MediaId)
+            .SubmitMediaRequestAsync(user.Username, authInfo.Token, request.MediaType, request.MediaId)
             .ConfigureAwait(false);
 
         return result switch

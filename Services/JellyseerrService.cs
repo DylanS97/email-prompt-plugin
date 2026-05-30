@@ -358,14 +358,19 @@ public class JellyseerrService
 
     /// <summary>
     /// Submits a media request to JellySeerr on behalf of the given Jellyfin user.
+    /// Authenticates as the user via their Jellyfin token so their own JellySeerr
+    /// permissions determine approval. Falls back to admin key + userId attribution
+    /// if the user session cannot be established.
     /// For TV shows, all available seasons (season number > 0) are requested automatically.
     /// </summary>
     /// <param name="jellyfinUsername">Jellyfin username used to look up the JellySeerr user ID.</param>
+    /// <param name="jellyfinToken">The user's Jellyfin auth token, used to obtain a JellySeerr user session. May be null.</param>
     /// <param name="mediaType">"movie" or "tv".</param>
     /// <param name="mediaId">TMDB ID of the media to request.</param>
     /// <returns>Result indicating success, conflict (already requested), or failure.</returns>
     public async Task<DeletionRequestResult> SubmitMediaRequestAsync(
         string jellyfinUsername,
+        string? jellyfinToken,
         string mediaType,
         int mediaId)
     {
@@ -378,39 +383,71 @@ public class JellyseerrService
             return DeletionRequestResult.Failure;
         }
 
-        var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
-        if (user is null)
+        var baseUrl = config.JellyseerrUrl.TrimEnd('/');
+
+        // Fetch TV seasons using the admin client (metadata lookup only)
+        int[]? seasons = null;
+        if (string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning(
-                "JellySeerr Integration: cannot submit request for '{Username}' — not found in JellySeerr",
+            using var adminClient = _httpClientFactory.CreateClient("JellySeerr");
+            adminClient.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
+            seasons = await FetchTvSeasonsAsync(adminClient, baseUrl, mediaId).ConfigureAwait(false);
+        }
+
+        // Try to get a session cookie for the user by authenticating with their Jellyfin token.
+        // This makes the JellySeerr request use the user's own permissions (no auto-approve
+        // unless the user themselves has that permission).
+        var sessionCookie = await TryGetUserSessionCookieAsync(jellyfinToken, baseUrl).ConfigureAwait(false);
+
+        object requestBody;
+        if (sessionCookie is not null)
+        {
+            // Authenticated as the user — no need for userId in the body
+            requestBody = seasons is not null
+                ? (object)new { mediaType, mediaId, seasons }
+                : (object)new { mediaType, mediaId };
+            _logger.LogDebug(
+                "JellySeerr Integration: submitting {MediaType}/{MediaId} as user '{Username}' via session",
+                mediaType,
+                mediaId,
                 jellyfinUsername);
-            return DeletionRequestResult.Failure;
+        }
+        else
+        {
+            // Fall back to admin key; pass userId so the request is attributed to the user
+            var user = await FindUserAsync(jellyfinUsername).ConfigureAwait(false);
+            if (user is null)
+            {
+                _logger.LogWarning(
+                    "JellySeerr Integration: cannot submit request for '{Username}' — not found in JellySeerr",
+                    jellyfinUsername);
+                return DeletionRequestResult.Failure;
+            }
+
+            requestBody = seasons is not null
+                ? (object)new { mediaType, mediaId, seasons, userId = user.Id }
+                : (object)new { mediaType, mediaId, userId = user.Id };
+            _logger.LogDebug(
+                "JellySeerr Integration: submitting {MediaType}/{MediaId} via admin key for '{Username}' (userId={UserId})",
+                mediaType,
+                mediaId,
+                jellyfinUsername,
+                user.Id);
         }
 
         try
         {
             using var client = _httpClientFactory.CreateClient("JellySeerr");
-            client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
-
-            var baseUrl = config.JellyseerrUrl.TrimEnd('/');
-
-            int[]? seasons = null;
-            if (string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase))
+            if (sessionCookie is not null)
             {
-                seasons = await FetchTvSeasonsAsync(client, baseUrl, mediaId).ConfigureAwait(false);
+                client.DefaultRequestHeaders.Add("Cookie", sessionCookie);
+            }
+            else
+            {
+                client.DefaultRequestHeaders.Add(ApiKeyHeader, config.JellyseerrApiKey);
             }
 
-            var requestBody = seasons is not null
-                ? (object)new { mediaType, mediaId, seasons, userId = user.Id }
-                : (object)new { mediaType, mediaId, userId = user.Id };
-
             var requestUrl = $"{baseUrl}/api/v1/request";
-            _logger.LogDebug(
-                "JellySeerr Integration: submitting {MediaType} request for TMDB {MediaId} on behalf of '{Username}'",
-                mediaType,
-                mediaId,
-                jellyfinUsername);
-
             var response = await client.PostAsJsonAsync(requestUrl, requestBody).ConfigureAwait(false);
 
             if ((int)response.StatusCode == 409)
@@ -457,6 +494,54 @@ public class JellyseerrService
     /// </summary>
     /// <param name="jellyfinUsername">The Jellyfin username whose cache entry to remove.</param>
     public void InvalidateCache(string jellyfinUsername) => _cache.Remove(jellyfinUsername);
+
+    /// <summary>
+    /// Attempts to exchange the user's Jellyfin auth token for a JellySeerr session cookie
+    /// by posting to JellySeerr's Jellyfin auth endpoint. Returns the raw "connect.sid=..."
+    /// cookie value on success, or null if the exchange is not supported or fails.
+    /// </summary>
+    /// <param name="jellyfinToken">The user's active Jellyfin auth token, or null.</param>
+    /// <param name="baseUrl">The JellySeerr base URL.</param>
+    private async Task<string?> TryGetUserSessionCookieAsync(string? jellyfinToken, string baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(jellyfinToken))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient("JellySeerr");
+            var url = $"{baseUrl}/api/v1/auth/jellyfin";
+            var body = new { authToken = jellyfinToken };
+            using var response = await client.PostAsJsonAsync(url, body).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug(
+                    "JellySeerr Integration: Jellyfin token exchange returned {Status} — falling back to admin key",
+                    (int)response.StatusCode);
+                return null;
+            }
+
+            if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
+            {
+                foreach (var cookie in cookies)
+                {
+                    if (cookie.StartsWith("connect.sid=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return cookie.Split(';')[0];
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "JellySeerr Integration: error during Jellyfin token exchange");
+        }
+
+        return null;
+    }
 
     private async Task<int[]?> FetchTvSeasonsAsync(HttpClient client, string baseUrl, int tvId)
     {
