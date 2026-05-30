@@ -339,7 +339,10 @@
     }
 
     function isSearchPage() {
-        return window.location.hash.indexOf('search.html') !== -1;
+        var hash = window.location.hash;
+        return hash === '#/search'
+            || hash.indexOf('#/search?') === 0
+            || hash.indexOf('#/search&') === 0;
     }
 
     function removeSearchContainer() {
@@ -628,6 +631,11 @@
         lastSearchQuery = null;
         check();
         checkDeletionRequest();
+        checkSearchPage();
+    });
+
+    // Jellyfin updates the hash (e.g. query param) without firing viewshow on every keystroke.
+    window.addEventListener('hashchange', function () {
         checkSearchPage();
     });
 }());
