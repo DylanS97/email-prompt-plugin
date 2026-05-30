@@ -71,7 +71,7 @@
         left.setAttribute('style', 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap');
 
         var label = document.createElement('span');
-        label.textContent = 'Add your email to receive notifications:';
+        label.textContent = 'Add your email to receive notifications: ';
 
         var input = document.createElement('input');
         input.type = 'email';
@@ -191,7 +191,7 @@
 
         var msg = document.createElement('span');
         msg.setAttribute('style', 'flex:1');
-        msg.textContent = 'Email saved. You can update it anytime in your request server account settings.';
+        msg.textContent = 'Email saved. You can update it anytime in your request server account settings. Be sure to check your inbox (and spam folder) for a confirmation email!';
 
         banner.appendChild(msg);
         banner.appendChild(dismissBtn);
