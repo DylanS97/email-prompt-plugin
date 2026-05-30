@@ -6,17 +6,17 @@ namespace Jellyfin.Plugin.JellyseerrIntegration.Models;
 public sealed class DeletionRequestDto
 {
     /// <summary>
-    /// Gets or sets the JellySeerr media type: "movie" or "tv".
+    /// Gets or sets the native Jellyfin item ID (GUID string) for the media item.
+    /// </summary>
+    public string JellyfinMediaId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the media type: must be exactly "movie" or "tv".
     /// </summary>
     public string MediaType { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the TMDB ID of the media item.
-    /// </summary>
-    public int TmdbId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the human-readable title of the media item, used in the webhook payload.
+    /// Gets or sets the human-readable title of the media item.
     /// </summary>
     public string MediaTitle { get; set; } = string.Empty;
 }

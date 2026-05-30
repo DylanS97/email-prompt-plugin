@@ -56,14 +56,23 @@
                         </div>
                     </div>
 
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="DeleteRequestWebhookUrl">Delete Request Webhook URL (optional)</label>
-                        <input id="DeleteRequestWebhookUrl" name="DeleteRequestWebhookUrl" type="url" is="emby-input"
-                               placeholder="https://example.com/webhook" />
+                    <div class="checkboxContainer checkboxContainer-withDescription padded-left padded-right">
+                        <label class="emby-checkbox-label">
+                            <input id="EnableDeleteButton" name="EnableDeleteButton" type="checkbox" is="emby-checkbox" />
+                            <span>Enable delete request button</span>
+                        </label>
                         <div class="fieldDescription">
-                            When set, a <strong>Request Deletion</strong> button is shown to users who originally
-                            requested the media they are viewing. Clicking it POSTs a JSON payload to this URL
-                            containing the user's name, email, and a suitable subject and message.
+                            Shows a <strong>Request Deletion</strong> button to users who originally requested the media they are viewing.
+                        </div>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="DeleteRequestWebhookUrl">Delete Request Endpoint URL (optional)</label>
+                        <input id="DeleteRequestWebhookUrl" name="DeleteRequestWebhookUrl" type="url" is="emby-input"
+                               placeholder="https://example.com/api/jellyfin/delete-request/submit" />
+                        <div class="fieldDescription">
+                            URL of the delete request endpoint. The user's Jellyfin token is sent as a Bearer token
+                            and the request body includes the Jellyfin item ID, media title, and media type.
                         </div>
                     </div>
 
@@ -88,6 +97,7 @@
 
                 ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                     document.getElementById('EnableEmailPrompt').checked = config.EnableEmailPrompt !== false;
+                    document.getElementById('EnableDeleteButton').checked = config.EnableDeleteButton !== false;
                     document.getElementById('JellyseerrUrl').value = config.JellyseerrUrl || '';
                     document.getElementById('JellyseerrApiKey').value = config.JellyseerrApiKey || '';
                     document.getElementById('CustomFormUrl').value = config.CustomFormUrl || '';
@@ -102,6 +112,7 @@
 
                     ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                         config.EnableEmailPrompt = document.getElementById('EnableEmailPrompt').checked;
+                        config.EnableDeleteButton = document.getElementById('EnableDeleteButton').checked;
                         config.JellyseerrUrl = document.getElementById('JellyseerrUrl').value.trim();
                         config.JellyseerrApiKey = document.getElementById('JellyseerrApiKey').value.trim();
                         config.CustomFormUrl = document.getElementById('CustomFormUrl').value.trim();

@@ -231,15 +231,15 @@
             }
 
             var status = await resp.json();
-            if (status.HasRequest && status.HasEmail && status.WebhookConfigured) {
-                showDeletionButton(token, status);
+            if (status.HasRequest && status.WebhookConfigured) {
+                showDeletionButton(token, jellyfinItemId, status);
             }
         } catch (e) {
             // Fail silently — never interrupt normal Jellyfin usage
         }
     }
 
-    function showDeletionButton(token, status) {
+    function showDeletionButton(token, jellyfinItemId, status) {
         if (document.getElementById(DELETION_BTN_ID)) {
             return;
         }
@@ -279,13 +279,22 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
+                        jellyfinMediaId: jellyfinItemId,
                         mediaType: status.MediaType,
-                        tmdbId: status.TmdbId,
                         mediaTitle: status.MediaTitle
                     })
                 });
 
-                if (r.ok || r.status === 204) {
+                if (r.status === 409) {
+                    btn.textContent = 'Already requested';
+                    btn.style.background = '#7a5c00';
+                    btn.disabled = true;
+                    setTimeout(function () {
+                        if (document.body.contains(btn)) {
+                            btn.remove();
+                        }
+                    }, 5000);
+                } else if (r.ok || r.status === 204) {
                     btn.textContent = 'Request Sent';
                     btn.style.background = '#1a7a1a';
                     setTimeout(function () {

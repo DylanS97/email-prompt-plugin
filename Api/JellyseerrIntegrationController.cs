@@ -188,54 +188,65 @@ public class JellyseerrIntegrationController : ControllerBase
             .GetMediaRequestStatusAsync(user.Username, mediaType, tmdbId, item.Name)
             .ConfigureAwait(false);
 
-        status.WebhookConfigured = !string.IsNullOrWhiteSpace(config.DeleteRequestWebhookUrl);
+        status.WebhookConfigured = config.EnableDeleteButton
+            && !string.IsNullOrWhiteSpace(config.DeleteRequestWebhookUrl);
 
         return Ok(status);
     }
 
     /// <summary>
-    /// Sends a deletion request webhook to the configured external URL on behalf of the current user.
+    /// Submits a deletion request to the configured endpoint on behalf of the current user.
     /// </summary>
     /// <param name="request">The deletion request body.</param>
-    /// <returns>204 No Content on success.</returns>
+    /// <returns>204 No Content on success, 409 if a request already exists, 502 on failure.</returns>
     [HttpPost("DeletionRequest")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status502BadGateway)]
     public async Task<IActionResult> SendDeletionRequest([FromBody] DeletionRequestDto request)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.MediaTitle))
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.JellyfinMediaId)
+            || string.IsNullOrWhiteSpace(request.MediaTitle)
+            || (request.MediaType != "movie" && request.MediaType != "tv"))
         {
-            return BadRequest("MediaTitle is required.");
+            return BadRequest("JellyfinMediaId, MediaTitle, and MediaType (\"movie\" or \"tv\") are required.");
         }
 
         var authInfo = await _authContext.GetAuthorizationInfo(Request).ConfigureAwait(false);
         var user = authInfo.User;
 
-        if (user is null)
+        if (user is null || string.IsNullOrWhiteSpace(authInfo.Token))
         {
             return Unauthorized();
         }
 
         var config = Plugin.Instance?.Configuration;
-        if (config is null || string.IsNullOrWhiteSpace(config.DeleteRequestWebhookUrl))
+        if (config is null || !config.EnableDeleteButton || string.IsNullOrWhiteSpace(config.DeleteRequestWebhookUrl))
         {
-            _logger.LogWarning("JellySeerr Integration: deletion webhook URL is not configured");
-            return BadRequest("Deletion webhook is not configured.");
+            _logger.LogWarning("JellySeerr Integration: delete request endpoint is not configured or disabled");
+            return BadRequest("Delete request endpoint is not configured.");
         }
 
         _logger.LogInformation(
-            "JellySeerr Integration: '{Username}' is submitting a deletion request for '{Title}'",
+            "JellySeerr Integration: '{Username}' is submitting a deletion request for '{Title}' (item: {ItemId})",
             user.Username,
-            request.MediaTitle);
+            request.MediaTitle,
+            request.JellyfinMediaId);
 
-        var success = await _jellyseerrService
-            .SendDeletionWebhookAsync(user.Username, request.MediaTitle)
+        var result = await _jellyseerrService
+            .SendDeletionRequestAsync(authInfo.Token, request.JellyfinMediaId, request.MediaTitle, request.MediaType)
             .ConfigureAwait(false);
 
-        return success ? NoContent() : StatusCode(StatusCodes.Status502BadGateway);
+        return result switch
+        {
+            Models.DeletionRequestResult.Success => NoContent(),
+            Models.DeletionRequestResult.Conflict => Conflict(new { message = "You already have a pending deletion request for this item." }),
+            _ => StatusCode(StatusCodes.Status502BadGateway),
+        };
     }
 
     /// <summary>

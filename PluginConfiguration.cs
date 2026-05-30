@@ -13,6 +13,11 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableEmailPrompt { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether the delete request button feature is enabled.
+    /// </summary>
+    public bool EnableDeleteButton { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the JellySeerr base URL (no trailing slash), e.g. http://jellyseerr:5055.
     /// </summary>
     public string JellyseerrUrl { get; set; } = string.Empty;
