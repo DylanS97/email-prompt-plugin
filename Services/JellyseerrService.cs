@@ -329,7 +329,7 @@ public class JellyseerrService
                 }
 
                 var status = r.MediaInfo?.Status ?? 0;
-                if (status == 5)
+                if (status != 0)
                 {
                     continue;
                 }

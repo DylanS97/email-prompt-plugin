@@ -487,10 +487,6 @@
         container.appendChild(list);
 
         results.forEach(function (item) {
-            if (item.MediaStatus === 5) {
-                return;
-            }
-
             var displayTitle = item.Title || item.Name || 'Unknown';
             var dateStr = item.ReleaseDate || item.FirstAirDate || '';
             var formattedDate = formatDate(dateStr);
@@ -544,80 +540,65 @@
             var actionEl = document.createElement('div');
             actionEl.setAttribute('style', 'flex-shrink:0');
 
-            var pendingStatuses = { 2: 'Pending', 3: 'Processing', 4: 'Partially Available' };
-            if (pendingStatuses[item.MediaStatus]) {
-                var badge = document.createElement('span');
-                badge.textContent = pendingStatuses[item.MediaStatus];
-                badge.setAttribute('style', [
-                    'display:inline-block',
-                    'padding:4px 10px',
-                    'border-radius:4px',
-                    'background:#444',
-                    'color:#bbb',
-                    'font-size:12px'
-                ].join(';'));
-                actionEl.appendChild(badge);
-            } else {
-                var btn = document.createElement('button');
-                btn.textContent = 'Request';
-                btn.setAttribute('style', [
-                    'padding:5px 14px',
-                    'border-radius:4px',
-                    'border:none',
-                    'background:#2196f3',
-                    'color:#fff',
-                    'font-size:13px',
-                    'font-weight:bold',
-                    'cursor:pointer'
-                ].join(';'));
+            var btn = document.createElement('button');
+            btn.textContent = 'Request';
+            btn.setAttribute('style', [
+                'padding:5px 14px',
+                'border-radius:4px',
+                'border:none',
+                'background:#2196f3',
+                'color:#fff',
+                'font-size:13px',
+                'font-weight:bold',
+                'cursor:pointer'
+            ].join(';'));
 
-                btn.addEventListener('click', async function () {
-                    btn.disabled = true;
-                    btn.textContent = 'Sending…';
-                    btn.style.background = '#555';
+            btn.addEventListener('click', async function () {
+                btn.disabled = true;
+                btn.textContent = 'Sending…';
+                btn.style.background = '#555';
 
+                try {
+                    var currentToken;
                     try {
-                        var currentToken;
-                        try {
-                            currentToken = ApiClient.accessToken();
-                        } catch (e) {
-                            currentToken = null;
-                        }
-                        if (!currentToken) {
-                            btn.textContent = 'Not signed in';
-                            return;
-                        }
-
-                        var r = await fetch('/JellyseerrIntegration/MediaRequest', {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': 'MediaBrowser Token="' + currentToken + '"',
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ mediaType: mediaType, mediaId: mediaId })
-                        });
-
-                        if (r.status === 409) {
-                            btn.textContent = 'Already Requested';
-                            btn.style.background = '#444';
-                            btn.style.color = '#aaa';
-                        } else if (r.ok || r.status === 204) {
-                            btn.textContent = 'Requested ✓';
-                            btn.style.background = '#1a7a1a';
-                        } else {
-                            btn.textContent = 'Failed — retry';
-                            btn.style.background = '#7a1a1a';
-                            btn.disabled = false;
-                        }
+                        currentToken = ApiClient.accessToken();
                     } catch (e) {
+                        currentToken = null;
+                    }
+                    if (!currentToken) {
+                        btn.textContent = 'Not signed in';
+                        return;
+                    }
+
+                    var r = await fetch('/JellyseerrIntegration/MediaRequest', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'MediaBrowser Token="' + currentToken + '"',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ mediaType: mediaType, mediaId: mediaId })
+                    });
+
+                    if (r.status === 409) {
+                        btn.textContent = 'Already Requested';
+                        btn.style.background = '#444';
+                        btn.style.color = '#aaa';
+                    } else if (r.ok || r.status === 204) {
+                        btn.textContent = 'Requested ✓';
+                        btn.style.background = '#1a7a1a';
+                    } else {
                         btn.textContent = 'Failed — retry';
                         btn.style.background = '#7a1a1a';
                         btn.disabled = false;
                     }
-                });
+                } catch (e) {
+                    btn.textContent = 'Failed — retry';
+                    btn.style.background = '#7a1a1a';
+                    btn.disabled = false;
+                }
+            });
 
-                actionEl.appendChild(btn);
-            }
+            actionEl.appendChild(btn);
 
             card.appendChild(actionEl);
             list.appendChild(card);
