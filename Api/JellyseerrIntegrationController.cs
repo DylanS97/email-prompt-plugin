@@ -282,30 +282,29 @@ public class JellyseerrIntegrationController : ControllerBase
     }
 
     /// <summary>
-    /// Submits a media request to JellySeerr on behalf of the authenticated user.
+    /// Returns the JellySeerr base URL and (for TV shows) the available season numbers so
+    /// the browser can submit the request directly to JellySeerr using the user's own session.
     /// </summary>
-    /// <param name="request">The media request details.</param>
-    /// <returns>204 No Content on success, 409 if already requested, 502 on failure.</returns>
-    [HttpPost("MediaRequest")]
+    /// <param name="mediaType">The media type: "movie" or "tv".</param>
+    /// <param name="mediaId">The TMDB ID of the media to request.</param>
+    /// <returns>JellySeerr URL and season list for TV shows.</returns>
+    [HttpGet("MediaRequest/Prep")]
     [Authorize]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    [ProducesResponseType(StatusCodes.Status502BadGateway)]
-    public async Task<IActionResult> SubmitMediaRequest([FromBody] SubmitMediaRequestDto request)
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<RequestPrepDto>> GetRequestPrep(
+        [FromQuery] string mediaType,
+        [FromQuery] int mediaId)
     {
-        if (request is null
-            || (request.MediaType != "movie" && request.MediaType != "tv")
-            || request.MediaId <= 0)
+        if ((mediaType != "movie" && mediaType != "tv") || mediaId <= 0)
         {
-            return BadRequest("MediaType (\"movie\" or \"tv\") and a positive MediaId are required.");
+            return BadRequest("mediaType (\"movie\" or \"tv\") and a positive mediaId are required.");
         }
 
         var authInfo = await _authContext.GetAuthorizationInfo(Request).ConfigureAwait(false);
-        var user = authInfo.User;
-
-        if (user is null)
+        if (authInfo.User is null)
         {
             return Unauthorized();
         }
@@ -316,25 +315,22 @@ public class JellyseerrIntegrationController : ControllerBase
             || string.IsNullOrWhiteSpace(config.JellyseerrUrl)
             || string.IsNullOrWhiteSpace(config.JellyseerrApiKey))
         {
-            return BadRequest("Search integration is not configured or disabled.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
 
-        _logger.LogInformation(
-            "JellySeerr Integration: '{Username}' requesting {MediaType}/{MediaId}",
-            user.Username,
-            request.MediaType,
-            request.MediaId);
-
-        var result = await _jellyseerrService
-            .SubmitMediaRequestAsync(user.Username, authInfo.Token, request.MediaType, request.MediaId)
-            .ConfigureAwait(false);
-
-        return result switch
+        int[]? seasons = null;
+        if (string.Equals(mediaType, "tv", StringComparison.OrdinalIgnoreCase))
         {
-            DeletionRequestResult.Success => NoContent(),
-            DeletionRequestResult.Conflict => Conflict(new { message = "This item has already been requested." }),
-            _ => StatusCode(StatusCodes.Status502BadGateway),
-        };
+            seasons = await _jellyseerrService
+                .GetTvSeasonsAsync(config.JellyseerrUrl, mediaId)
+                .ConfigureAwait(false);
+        }
+
+        return Ok(new RequestPrepDto
+        {
+            JellyseerrUrl = config.JellyseerrUrl.TrimEnd('/'),
+            Seasons = seasons,
+        });
     }
 
     /// <summary>
